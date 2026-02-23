@@ -1,0 +1,1214 @@
+import { useState, useEffect, useRef } from "react";
+import { createWeb3Modal } from "@web3modal/wagmi/react";
+import { defaultWagmiConfig } from "@web3modal/wagmi/react/config";
+import { WagmiProvider, useAccount, useDisconnect } from "wagmi";
+import { mainnet } from "wagmi/chains";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useWeb3Modal } from "@web3modal/wagmi/react";
+
+// ─── WalletConnect / Web3Modal setup ─────────────────────────────────────────
+const projectId = "60ce60abcf144f20677ce7e052a00f35";
+
+const metadata = {
+  name: "PAXpromote",
+  description: "The premier promotion network for Paxfun tokens",
+  url: "https://paxpromote.paxeer.app",
+  icons: ["https://brand.paxeer.app/assets/500x5000_texr_logo_darkBG.png"],
+};
+
+const chains = [mainnet];
+const wagmiConfig = defaultWagmiConfig({ chains, projectId, metadata });
+const queryClient = new QueryClient();
+
+createWeb3Modal({
+  wagmiConfig,
+  projectId,
+  chains,
+  themeMode: "dark",
+  themeVariables: {
+    "--w3m-accent": "#00E0FF",
+    "--w3m-background-color": "#0c0c0e",
+    "--w3m-border-radius-master": "4px",
+    "--w3m-font-family": "Inter, sans-serif",
+  },
+});
+
+const TIERS = [
+  {
+    id: "word-out",
+    name: "Get The Word Out",
+    tagline: "Spark the conversation",
+    price: "500",
+    color: "#4ade80",
+    glow: "rgba(74,222,128,0.3)",
+    icon: "📡",
+    features: ["5 Raiders assigned", "24hr campaign", "Basic X amplification", "Project card listing", "Performance report"],
+  },
+  {
+    id: "make-noise",
+    name: "Make Some Noise",
+    tagline: "Build momentum",
+    price: "1,500",
+    color: "#00E0FF",
+    glow: "rgba(0,224,255,0.3)",
+    icon: "🔊",
+    features: ["15 Raiders assigned", "72hr campaign", "Boosted X amplification", "Trending hashtag push", "Artwork promotion", "Detailed analytics"],
+  },
+  {
+    id: "in-your-face",
+    name: "In Your Face",
+    tagline: "Dominate the feed",
+    price: "4,000",
+    color: "#00E0FF",
+    glow: "rgba(0,224,255,0.35)",
+    icon: "🔥",
+    featured: true,
+    features: ["40 Raiders assigned", "7-day campaign", "Premium X raids", "Priority placement", "Community raids", "Meme & content package", "Live tracking dashboard"],
+  },
+  {
+    id: "kol-package",
+    name: "KOL Package",
+    tagline: "Full-spectrum domination",
+    price: "12,000",
+    color: "#a78bfa",
+    glow: "rgba(167,139,250,0.35)",
+    icon: "👑",
+    features: ["100+ Raiders assigned", "30-day campaign", "KOL endorsements", "Spaces events", "Viral content creation", "AMA coordination", "Dedicated campaign manager", "Real-time command center"],
+  },
+];
+
+const MOCK_RAIDERS = [
+  { rank: 1, name: "CryptoViper", handle: "@CryptoViper_X", avatar: "🦅", followers: "284K", earnings: "42,800", raids: 1847, tier: "Elite", badge: "👑" },
+  { rank: 2, name: "MoonHunter", handle: "@MoonHunter99", avatar: "🐺", followers: "156K", earnings: "31,200", raids: 1203, tier: "Elite", badge: "🔥" },
+  { rank: 3, name: "PaxRaider_Z", handle: "@PaxRaider_Z", avatar: "🦊", followers: "89K", earnings: "18,600", raids: 904, tier: "Pro", badge: "⚡" },
+  { rank: 4, name: "BlockSniper", handle: "@BlockSniper", avatar: "🎯", followers: "67K", earnings: "12,400", raids: 741, tier: "Pro", badge: "🎯" },
+  { rank: 5, name: "NeonWolf", handle: "@NeonWolf_DeFi", avatar: "🐉", followers: "43K", earnings: "8,900", raids: 612, tier: "Rising", badge: "💎" },
+  { rank: 6, name: "SatoshiGhost", handle: "@SatoshiGhost", avatar: "👻", followers: "38K", earnings: "7,100", raids: 534, tier: "Rising", badge: "🚀" },
+  { rank: 7, name: "DeFiPhantom", handle: "@DeFiPhantom", avatar: "⚡", followers: "29K", earnings: "5,600", raids: 478, tier: "Rising", badge: "💫" },
+  { rank: 8, name: "TokenStorm", handle: "@TokenStorm_", avatar: "🌪️", followers: "21K", earnings: "4,200", raids: 391, tier: "Starter", badge: "🌟" },
+];
+
+const MOCK_RAIDS = [
+  { project: "NOVA Token", task: "Quote tweet with $NOVA", status: "completed", earned: "45 PAX", time: "2h ago" },
+  { project: "PepeChain", task: "Reply engagement thread", status: "completed", earned: "28 PAX", time: "5h ago" },
+  { project: "MoonFi", task: "Original post with artwork", status: "pending", earned: "60 PAX", time: "Active" },
+  { project: "AstroDAO", task: "Twitter Space participation", status: "pending", earned: "120 PAX", time: "Active" },
+];
+
+// ─── Brand tokens ───────────────────────────────────────────────────────────
+const C = {
+  cyan: "#00E0FF",
+  cyanDim: "rgba(0,224,255,0.10)",
+  cyanGlow: "rgba(0,224,255,0.25)",
+  cyanBorder: "rgba(0,224,255,0.3)",
+  bg: "#050505",
+  bg2: "#0c0c0e",
+  border: "rgba(255,255,255,0.06)",
+  text: "#ffffff",
+  text2: "rgba(255,255,255,0.55)",
+  text3: "rgba(255,255,255,0.25)",
+  green: "#4ade80",
+  purple: "#a78bfa",
+};
+
+const btnPrimary = {
+  background: `linear-gradient(135deg, ${C.cyan}, #0090cc)`,
+  border: "none",
+  color: "#050505",
+  fontFamily: "'Inter', sans-serif",
+  fontWeight: 800,
+  letterSpacing: "0.10em",
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  clipPath: "polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%)",
+  transition: "opacity 0.2s, filter 0.2s",
+};
+
+const btnGhost = {
+  background: "transparent",
+  border: `1px solid ${C.cyanBorder}`,
+  color: C.cyan,
+  fontFamily: "'Inter', sans-serif",
+  fontWeight: 700,
+  letterSpacing: "0.10em",
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  clipPath: "polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%)",
+};
+
+const labelStyle = {
+  fontFamily: "'Space Mono', monospace",
+  letterSpacing: "0.15em",
+  fontSize: "0.7rem",
+  color: C.text3,
+  textTransform: "uppercase",
+  marginBottom: "0.5rem",
+};
+
+// ─── Navbar ──────────────────────────────────────────────────────────────────
+function Navbar({ view, setView, wallet, onConnectClick, onDisconnect }) {
+  const [scrolled, setScrolled] = useState(false);
+  const [dashOpen, setDashOpen] = useState(false);
+  const dashRef = useRef(null);
+
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", handler);
+    return () => window.removeEventListener("scroll", handler);
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => { if (dashRef.current && !dashRef.current.contains(e.target)) setDashOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const isDashView = view === "raider" || view === "dev";
+
+  return (
+    <nav style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
+      background: scrolled ? "rgba(5,5,5,0.97)" : "transparent",
+      backdropFilter: scrolled ? "blur(20px)" : "none",
+      borderBottom: scrolled ? `1px solid ${C.cyanBorder}` : "none",
+      transition: "all 0.4s ease",
+      padding: "0 2rem",
+    }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 72 }}>
+
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", cursor: "pointer" }} onClick={() => setView("home")}>
+          <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.45rem", letterSpacing: "-0.03em", color: C.text }}>PAX</span>
+          <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, fontSize: "1.45rem", letterSpacing: "-0.02em", color: C.text }}>promote</span>
+        </div>
+
+        {/* Nav links */}
+        <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+
+          {/* Dashboard dropdown — first */}
+          <div ref={dashRef} style={{ position: "relative" }}>
+            <button
+              onClick={() => setDashOpen(o => !o)}
+              style={{
+                background: "transparent",
+                border: "1px solid transparent",
+                color: isDashView ? C.cyan : C.text2,
+                padding: "0.4rem 1rem",
+                fontFamily: "'Inter', sans-serif",
+                fontWeight: 600, letterSpacing: "0.08em", fontSize: "0.75rem",
+                cursor: "pointer", borderRadius: 4,
+                transition: "all 0.2s",
+                display: "flex", alignItems: "center", gap: 5,
+              }}>
+              DASHBOARD
+              <span style={{
+                fontSize: "0.55rem",
+                transform: dashOpen ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s",
+                display: "inline-block",
+                opacity: 0.6,
+              }}>▼</span>
+            </button>
+
+            {dashOpen && (
+              <div style={{
+                position: "absolute", top: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
+                background: "#0c0c0e",
+                border: `1px solid ${C.cyanBorder}`,
+                borderRadius: 8,
+                overflow: "hidden",
+                minWidth: 180,
+                boxShadow: `0 8px 32px rgba(0,0,0,0.6), 0 0 20px ${C.cyanGlow}`,
+                animation: "modalIn 0.15s ease",
+              }}>
+                {[
+                  { v: "dev",    label: "Dev Dashboard",    icon: "⬡", desc: "Token launcher view" },
+                  { v: "raider", label: "Raider Dashboard", icon: "⚡", desc: "Raider earnings view" },
+                ].map(({ v, label, icon, desc }) => (
+                  <button key={v} onClick={() => { setView(v); setDashOpen(false); }} style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    width: "100%", padding: "13px 16px",
+                    background: view === v ? C.cyanDim : "transparent",
+                    border: "none",
+                    borderLeft: view === v ? `2px solid ${C.cyan}` : "2px solid transparent",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: "background 0.15s",
+                  }}>
+                    <span style={{ fontSize: "1.1rem", opacity: 0.8 }}>{icon}</span>
+                    <div>
+                      <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.85rem", color: view === v ? C.cyan : C.text }}>{label}</div>
+                      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.7rem", color: C.text3, marginTop: 1 }}>{desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Other nav items */}
+          {[["home", "HOME"], ["tiers", "TIERS"], ["leaderboard", "LEADERBOARD"], ["promote", "PROMOTE"]].map(([v, label]) => (
+            <button key={v} onClick={() => setView(v)} style={{
+              background: "transparent",
+              border: "1px solid transparent",
+              color: view === v ? C.cyan : C.text2,
+              padding: "0.4rem 1rem",
+              fontFamily: "'Inter', sans-serif",
+              fontWeight: 600, letterSpacing: "0.08em", fontSize: "0.75rem",
+              cursor: "pointer", borderRadius: 4,
+              transition: "all 0.2s",
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {wallet ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: C.cyanDim, border: `1px solid ${C.cyanBorder}`,
+              borderRadius: 6, padding: "6px 12px",
+              fontFamily: "'Space Mono', monospace", fontSize: "0.75rem", color: C.cyan,
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
+              {wallet.slice(0, 6)}…{wallet.slice(-4)}
+            </div>
+            <button onClick={onDisconnect} style={{
+              background: "transparent", border: `1px solid ${C.border}`,
+              color: C.text3, padding: "6px 10px", borderRadius: 6,
+              fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: "0.72rem",
+              cursor: "pointer", letterSpacing: "0.06em",
+            }}>DISCONNECT</button>
+          </div>
+        ) : (
+          <button onClick={onConnectClick} style={{
+            ...btnPrimary,
+            padding: "0.5rem 1.4rem",
+            fontSize: "0.8rem",
+          }}>CONNECT WALLET</button>
+        )}
+      </div>
+    </nav>
+  );
+}
+
+// ─── Hero ─────────────────────────────────────────────────────────────────────
+function Hero({ setView, onConnectClick }) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setCount(c => c < 12847 ? c + Math.floor(Math.random() * 150) : 12847), 30);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <section style={{
+      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+      position: "relative", overflow: "hidden", paddingTop: 72,
+    }}>
+      {/* Grid background */}
+      <div style={{
+        position: "absolute", inset: 0,
+        backgroundImage: `
+          linear-gradient(${C.cyanDim} 1px, transparent 1px),
+          linear-gradient(90deg, ${C.cyanDim} 1px, transparent 1px)
+        `,
+        backgroundSize: "60px 60px",
+        opacity: 0.5,
+      }} />
+
+      {/* Radial glow */}
+      <div style={{
+        position: "absolute", top: "40%", left: "50%", transform: "translate(-50%,-50%)",
+        width: 900, height: 900, borderRadius: "50%",
+        background: `radial-gradient(ellipse, rgba(0,224,255,0.07) 0%, transparent 70%)`,
+        pointerEvents: "none",
+      }} />
+
+      {/* Diagonal accent */}
+      <div style={{
+        position: "absolute", top: 0, right: "20%", width: 1, height: "100%",
+        background: `linear-gradient(180deg, transparent, ${C.cyanGlow}, transparent)`,
+        transform: "rotate(15deg)", transformOrigin: "top",
+      }} />
+
+      <div style={{ textAlign: "center", position: "relative", zIndex: 1, padding: "0 2rem" }}>
+
+        {/* Live badge */}
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: "0.6rem",
+          background: C.cyanDim, border: `1px solid ${C.cyanBorder}`,
+          borderRadius: 100, padding: "0.3rem 1rem", marginBottom: "2rem",
+          fontFamily: "'Space Mono', monospace", fontSize: "0.7rem",
+          letterSpacing: "0.15em", color: C.cyan,
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, animation: "pulse 2s infinite" }} />
+          RAID FORCE ACTIVE · {count.toLocaleString()} PAX DISTRIBUTED
+        </div>
+
+        <h1 style={{
+          fontFamily: "'Inter', sans-serif",
+          fontWeight: 800,
+          fontSize: "clamp(4rem, 11vw, 8.5rem)",
+          lineHeight: 0.92, letterSpacing: "-0.04em",
+          color: C.text, margin: 0,
+        }}>
+          LAUNCH.<br />
+          <span style={{ color: C.cyan, textShadow: `0 0 60px ${C.cyanGlow}` }}>RAID.</span><br />
+          DOMINATE.
+        </h1>
+
+        <p style={{
+          fontFamily: "'Inter', sans-serif", fontWeight: 300,
+          fontSize: "clamp(1rem, 2.5vw, 1.2rem)",
+          color: C.text2, maxWidth: 580,
+          margin: "2rem auto", lineHeight: 1.7,
+        }}>
+          The premier promotion network for Paxfun tokens. Deploy raid forces, amplify your project across X, and dominate the crypto conversation.
+        </p>
+
+        <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap", marginTop: "2.5rem" }}>
+          <button onClick={() => setView("promote")} style={{ ...btnPrimary, padding: "1rem 2.5rem", fontSize: "1rem" }}>
+            PROMOTE YOUR TOKEN
+          </button>
+          <button onClick={() => setView("raider")} style={{ ...btnGhost, padding: "1rem 2.5rem", fontSize: "1rem" }}>
+            BECOME A RAIDER
+          </button>
+        </div>
+
+        {/* Stats bar */}
+        <div style={{
+          display: "flex", gap: "3rem", justifyContent: "center", marginTop: "5rem",
+          borderTop: `1px solid ${C.border}`, paddingTop: "3rem", flexWrap: "wrap",
+        }}>
+          {[["2,847", "Active Raiders"], ["$4.2M", "PAX Distributed"], ["847", "Tokens Promoted"], ["98.3%", "Campaign Success"]].map(([num, label]) => (
+            <div key={label} style={{ textAlign: "center" }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "2rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{num}</div>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.7rem", letterSpacing: "0.15em", color: C.text3, marginTop: 4, textTransform: "uppercase" }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── Tiers ────────────────────────────────────────────────────────────────────
+function TiersPage({ setView }) {
+  const [selected, setSelected] = useState(null);
+  return (
+    <div style={{ minHeight: "100vh", paddingTop: 120, paddingBottom: 80 }}>
+      <div style={{ textAlign: "center", marginBottom: "4rem" }}>
+        <div style={{ fontFamily: "'Space Mono', monospace", letterSpacing: "0.2em", color: C.cyan, fontSize: "0.7rem", marginBottom: "1rem", textTransform: "uppercase" }}>Select Your Campaign Tier</div>
+        <h2 style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "clamp(3rem, 8vw, 5rem)", color: C.text, margin: 0, letterSpacing: "-0.04em" }}>
+          CHOOSE YOUR <span style={{ color: C.cyan }}>FIREPOWER</span>
+        </h2>
+        <p style={{ color: C.text2, fontFamily: "'Inter', sans-serif", marginTop: "1rem", fontSize: "0.9rem" }}>All payments in PAX token · Instant deployment after confirmation</p>
+      </div>
+
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 2rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
+        {TIERS.map((tier) => (
+          <div key={tier.id} onClick={() => { setSelected(tier.id); setView("promote"); }}
+            style={{
+              background: tier.featured ? `linear-gradient(180deg, rgba(0,224,255,0.06) 0%, rgba(5,5,5,0.95) 100%)` : "rgba(255,255,255,0.02)",
+              border: `1px solid ${tier.featured ? C.cyan : C.border}`,
+              borderRadius: 4, padding: "2.5rem 2rem", cursor: "pointer", position: "relative",
+              transition: "all 0.3s ease",
+              boxShadow: tier.featured ? `0 0 40px ${C.cyanGlow}` : "none",
+              transform: tier.featured ? "translateY(-8px)" : "none",
+            }}>
+            {tier.featured && (
+              <div style={{
+                position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)",
+                background: `linear-gradient(135deg, ${C.cyan}, #0090cc)`,
+                color: "#050505", fontFamily: "'Inter', sans-serif",
+                fontWeight: 800, letterSpacing: "0.15em", fontSize: "0.65rem",
+                padding: "0.25rem 1rem",
+                clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)",
+              }}>MOST POPULAR</div>
+            )}
+
+            <div style={{ fontSize: "2rem", marginBottom: "1rem" }}>{tier.icon}</div>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.4rem", color: tier.color, letterSpacing: "-0.02em", lineHeight: 1 }}>{tier.name}</div>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.85rem", color: C.text2, marginTop: "0.3rem", marginBottom: "2rem" }}>{tier.tagline}</div>
+
+            <div style={{ marginBottom: "2rem" }}>
+              <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "2.8rem", color: C.text, letterSpacing: "-0.04em" }}>{tier.price}</span>
+              <span style={{ color: C.cyan, fontFamily: "'Inter', sans-serif", fontWeight: 700, marginLeft: "0.4rem" }}>PAX</span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "2rem" }}>
+              {tier.features.map(f => (
+                <div key={f} style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                  <div style={{ width: 16, height: 16, borderRadius: 3, background: tier.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: "0.6rem", color: "#050505", fontWeight: 900 }}>✓</span>
+                  </div>
+                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.85rem", color: C.text2 }}>{f}</span>
+                </div>
+              ))}
+            </div>
+
+            <button style={{
+              width: "100%",
+              background: tier.featured ? `linear-gradient(135deg, ${C.cyan}, #0090cc)` : "transparent",
+              border: `1px solid ${tier.color}`,
+              color: tier.featured ? "#050505" : tier.color,
+              padding: "0.85rem",
+              fontFamily: "'Inter', sans-serif", fontWeight: 800,
+              letterSpacing: "0.12em", fontSize: "0.85rem", cursor: "pointer",
+              clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)",
+            }}>DEPLOY CAMPAIGN</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Leaderboard ──────────────────────────────────────────────────────────────
+function Leaderboard() {
+  return (
+    <div style={{ minHeight: "100vh", paddingTop: 120, paddingBottom: 80 }}>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 2rem" }}>
+        <div style={{ textAlign: "center", marginBottom: "3rem" }}>
+          <div style={{ fontFamily: "'Space Mono', monospace", letterSpacing: "0.2em", color: C.cyan, fontSize: "0.7rem", marginBottom: "1rem", textTransform: "uppercase" }}>Season 3 · Live Rankings</div>
+          <h2 style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "clamp(3rem, 8vw, 4.5rem)", color: C.text, margin: 0, letterSpacing: "-0.04em" }}>
+            RAID <span style={{ color: C.cyan }}>LEADERBOARD</span>
+          </h2>
+        </div>
+
+        {/* Top 3 podium */}
+        <div style={{ display: "flex", gap: "1rem", marginBottom: "2rem", alignItems: "flex-end", justifyContent: "center" }}>
+          {[MOCK_RAIDERS[1], MOCK_RAIDERS[0], MOCK_RAIDERS[2]].map((r, i) => {
+            const heights = ["140px", "180px", "120px"];
+            const labels = ["2nd", "1st", "3rd"];
+            const colors = [C.purple, C.cyan, C.green];
+            return (
+              <div key={r.rank} style={{ flex: 1, maxWidth: 220, textAlign: "center" }}>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "2rem" }}>{r.avatar}</div>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, color: C.text, fontSize: "0.95rem" }}>{r.name}</div>
+                <div style={{ color: C.text3, fontSize: "0.75rem", marginBottom: "0.5rem" }}>{r.handle}</div>
+                <div style={{
+                  height: heights[i], background: `linear-gradient(180deg, ${colors[i]}22, ${colors[i]}08)`,
+                  border: `1px solid ${colors[i]}`, borderBottom: "none",
+                  display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "1rem",
+                }}>
+                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.6rem", fontWeight: 700, color: colors[i] }}>{labels[i]}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Table */}
+        <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "60px 1fr 120px 100px 100px 80px", padding: "0.75rem 1.5rem", borderBottom: `1px solid ${C.border}`, background: C.cyanDim }}>
+            {["#", "RAIDER", "FOLLOWERS", "RAIDS", "EARNED", "TIER"].map(h => (
+              <div key={h} style={{ fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em", fontSize: "0.65rem", color: C.text3 }}>{h}</div>
+            ))}
+          </div>
+          {MOCK_RAIDERS.map((r, i) => (
+            <div key={r.rank} style={{
+              display: "grid", gridTemplateColumns: "60px 1fr 120px 100px 100px 80px",
+              padding: "1rem 1.5rem", borderBottom: `1px solid ${C.border}`,
+              background: i < 3 ? C.cyanDim : "transparent",
+              alignItems: "center",
+            }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.2rem", fontWeight: 700, color: i < 3 ? C.cyan : C.text3 }}>#{r.rank}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <span style={{ fontSize: "1.5rem" }}>{r.avatar}</span>
+                <div>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, color: C.text, fontSize: "0.95rem" }}>{r.name} <span>{r.badge}</span></div>
+                  <div style={{ color: C.text3, fontSize: "0.75rem" }}>{r.handle}</div>
+                </div>
+              </div>
+              <div style={{ fontFamily: "'Space Mono', monospace", color: C.cyan, fontWeight: 600, fontSize: "0.85rem" }}>{r.followers}</div>
+              <div style={{ fontFamily: "'Space Mono', monospace", color: C.text2, fontSize: "0.85rem" }}>{r.raids}</div>
+              <div style={{ fontFamily: "'Space Mono', monospace", color: C.green, fontWeight: 600, fontSize: "0.85rem" }}>{r.earnings} PAX</div>
+              <div style={{
+                fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "0.08em",
+                color: r.tier === "Elite" ? C.cyan : r.tier === "Pro" ? C.purple : r.tier === "Rising" ? C.green : C.text3,
+                border: `1px solid ${r.tier === "Elite" ? C.cyanBorder : r.tier === "Pro" ? "rgba(167,139,250,0.4)" : r.tier === "Rising" ? "rgba(74,222,128,0.4)" : C.border}`,
+                padding: "0.15rem 0.5rem", borderRadius: 3,
+              }}>{r.tier.toUpperCase()}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Raider Dashboard ─────────────────────────────────────────────────────────
+function RaiderDashboard({ wallet, onConnectClick }) {
+  const [tab, setTab] = useState("overview");
+  const mockRaider = MOCK_RAIDERS[0];
+
+  if (!wallet) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 72 }}>
+      <div style={{ textAlign: "center", maxWidth: 420, padding: "0 2rem" }}>
+        <div style={{ fontSize: "3rem", marginBottom: "1.5rem" }}>🔒</div>
+        <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.8rem", letterSpacing: "-0.03em", marginBottom: "0.75rem" }}>
+          Connect to access your <span style={{ color: C.cyan }}>Raider Dashboard</span>
+        </div>
+        <div style={{ fontFamily: "'Inter', sans-serif", color: C.text2, fontSize: "0.9rem", lineHeight: 1.7, marginBottom: "2rem" }}>
+          Connect your wallet via WalletConnect to sign in and view your raids, earnings, and profile.
+        </div>
+        <button onClick={onConnectClick} style={{ ...btnPrimary, padding: "0.9rem 2.5rem", fontSize: "0.95rem" }}>
+          CONNECT WALLET
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", paddingTop: 100, paddingBottom: 80 }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 2rem" }}>
+
+        {/* Profile Header */}
+        <div style={{
+          background: `linear-gradient(135deg, rgba(0,224,255,0.07), rgba(0,144,204,0.04))`,
+          border: `1px solid ${C.cyanBorder}`, borderRadius: 4, padding: "2rem",
+          display: "flex", alignItems: "center", gap: "2rem", marginBottom: "2rem", flexWrap: "wrap",
+        }}>
+          <div style={{
+            width: 80, height: 80, borderRadius: "50%", background: C.cyanDim,
+            border: `2px solid ${C.cyan}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "2.5rem",
+            boxShadow: `0 0 20px ${C.cyanGlow}`,
+          }}>{mockRaider.avatar}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.8rem", color: C.text, letterSpacing: "-0.03em" }}>
+              {mockRaider.name} <span style={{ color: C.cyan }}>{mockRaider.badge}</span>
+            </div>
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.4rem" }}>
+              <span style={{ fontFamily: "'Inter', sans-serif", color: C.text2, fontSize: "0.9rem" }}>{mockRaider.handle}</span>
+              <span style={{ background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, color: C.cyan, padding: "0.1rem 0.6rem", fontSize: "0.7rem", fontFamily: "'Space Mono', monospace", letterSpacing: "0.08em", borderRadius: 2 }}>X LINKED ✓</span>
+              <span style={{ background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, color: C.cyan, padding: "0.1rem 0.6rem", fontSize: "0.7rem", fontFamily: "'Space Mono', monospace", letterSpacing: "0.08em", borderRadius: 2 }}>ELITE TIER</span>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "2rem" }}>
+            {[["42,800 PAX", "Total Earned"], ["1,847", "Total Raids"], ["#1", "Global Rank"], ["284K", "X Followers"]].map(([v, l]) => (
+              <div key={l} style={{ textAlign: "center" }}>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.5rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{v}</div>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.65rem", letterSpacing: "0.12em", color: C.text3, marginTop: 3, textTransform: "uppercase" }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: "0.25rem", marginBottom: "2rem", borderBottom: `1px solid ${C.border}`, paddingBottom: "0.5rem" }}>
+          {[["overview", "OVERVIEW"], ["raids", "ACTIVE RAIDS"], ["earnings", "EARNINGS"], ["profile", "PROFILE SETTINGS"]].map(([t, l]) => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              background: tab === t ? C.cyanDim : "transparent",
+              border: "none", borderBottom: tab === t ? `2px solid ${C.cyan}` : "2px solid transparent",
+              color: tab === t ? C.cyan : C.text3,
+              padding: "0.5rem 1.2rem", fontFamily: "'Inter', sans-serif",
+              fontWeight: 700, letterSpacing: "0.08em", fontSize: "0.75rem", cursor: "pointer",
+            }}>{l}</button>
+          ))}
+        </div>
+
+        {tab === "overview" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+            {/* Active campaigns */}
+            <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4, padding: "1.5rem" }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.1rem", color: C.text, letterSpacing: "-0.02em", marginBottom: "1.2rem" }}>
+                ACTIVE <span style={{ color: C.cyan }}>CAMPAIGNS</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {MOCK_RAIDS.map((raid, i) => (
+                  <div key={i} style={{
+                    background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`,
+                    borderRadius: 3, padding: "1rem", display: "flex", alignItems: "center", justifyContent: "space-between",
+                  }}>
+                    <div>
+                      <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, color: C.text, fontSize: "0.9rem" }}>{raid.project}</div>
+                      <div style={{ color: C.text3, fontSize: "0.78rem", marginTop: 2 }}>{raid.task}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontFamily: "'Space Mono', monospace", color: C.green, fontWeight: 600, fontSize: "0.85rem" }}>{raid.earned}</div>
+                      <div style={{ fontSize: "0.7rem", marginTop: 2, color: raid.status === "completed" ? C.green : C.cyan }}>
+                        {raid.status === "completed" ? "✓ DONE" : "● ACTIVE"}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Cashout + multipliers */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+              <div style={{ background: `linear-gradient(135deg, rgba(0,224,255,0.07), rgba(5,5,5,0.5))`, border: `1px solid ${C.cyanBorder}`, borderRadius: 4, padding: "1.5rem" }}>
+                <div style={{ ...labelStyle, marginBottom: "0.5rem" }}>Available Balance</div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "2.8rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>3,840 PAX</div>
+                <div style={{ color: C.text3, fontSize: "0.8rem", marginBottom: "1.5rem", fontFamily: "'Inter', sans-serif" }}>≈ $192.00 USD</div>
+                <button style={{
+                  width: "100%",
+                  background: `linear-gradient(135deg, ${C.cyan}, #0090cc)`,
+                  border: "none", color: "#050505", padding: "0.85rem",
+                  fontFamily: "'Inter', sans-serif", fontWeight: 800,
+                  letterSpacing: "0.12em", fontSize: "0.85rem", cursor: "pointer",
+                  clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)",
+                }}>CASH OUT TO WALLET</button>
+              </div>
+
+              <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4, padding: "1.5rem" }}>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1rem", color: C.text, marginBottom: "1rem", letterSpacing: "-0.02em" }}>EARNINGS MULTIPLIER</div>
+                {[["Follower Bonus", "284K followers", "+2.8x"], ["Raid Streak", "47 days active", "+1.5x"], ["Elite Tier", "Top 10 rank", "+2.0x"]].map(([label, sub, mult]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0", borderBottom: `1px solid ${C.border}` }}>
+                    <div>
+                      <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, color: C.text2, fontSize: "0.85rem" }}>{label}</div>
+                      <div style={{ color: C.text3, fontSize: "0.73rem", fontFamily: "'Inter', sans-serif" }}>{sub}</div>
+                    </div>
+                    <div style={{ fontFamily: "'Space Mono', monospace", color: C.cyan, fontSize: "1.2rem", fontWeight: 700 }}>{mult}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === "profile" && (
+          <div style={{ maxWidth: 600 }}>
+            <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4, padding: "2rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+              <div>
+                <div style={labelStyle}>Profile Photo</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                  <div style={{ width: 64, height: 64, borderRadius: "50%", background: C.cyanDim, border: `2px solid ${C.cyanBorder}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem" }}>🦅</div>
+                  <button style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.5rem 1rem", fontFamily: "'Inter', sans-serif", fontWeight: 600, letterSpacing: "0.08em", fontSize: "0.8rem", cursor: "pointer", borderRadius: 3 }}>UPLOAD PHOTO</button>
+                </div>
+              </div>
+
+              {[["DISPLAY NAME", "CryptoViper"], ["BIO", "Elite raider · Crypto OG · Building on Paxfun"], ["WALLET ADDRESS", "0x1234...5678"]].map(([label, val]) => (
+                <div key={label}>
+                  <div style={labelStyle}>{label}</div>
+                  <input defaultValue={val} style={{
+                    width: "100%", background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`,
+                    color: C.text, padding: "0.75rem 1rem", fontFamily: "'Inter', sans-serif", fontSize: "0.9rem",
+                    borderRadius: 3, outline: "none", boxSizing: "border-box",
+                    transition: "border-color 0.2s",
+                  }} onFocus={e => e.target.style.borderColor = C.cyanBorder}
+                    onBlur={e => e.target.style.borderColor = C.border} />
+                </div>
+              ))}
+
+              <div style={{ background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, borderRadius: 3, padding: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, color: C.cyan, fontSize: "0.9rem" }}>X (TWITTER) ACCOUNT</div>
+                  <div style={{ color: C.text3, fontSize: "0.8rem", fontFamily: "'Inter', sans-serif", marginTop: 3 }}>@CryptoViper_X · 284K followers · Connected</div>
+                </div>
+                <button style={{ background: C.cyan, border: "none", color: "#050505", padding: "0.4rem 1rem", fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "0.75rem", letterSpacing: "0.08em", cursor: "pointer", borderRadius: 3 }}>LINKED ✓</button>
+              </div>
+
+              <button style={{
+                ...btnPrimary,
+                padding: "0.85rem",
+                width: "100%",
+                clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)",
+              }}>SAVE CHANGES</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Promote ──────────────────────────────────────────────────────────────────
+function PromotePage({ wallet, onConnectClick }) {
+  const [step, setStep] = useState(1);
+  const [selectedTier, setSelectedTier] = useState(null);
+  const [form, setForm] = useState({ tokenName: "", contractAddress: "", xHandle: "", description: "", launchpadUrl: "" });
+
+  const inputStyle = {
+    width: "100%", background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`,
+    color: C.text, padding: "0.75rem 1rem", fontFamily: "'Inter', sans-serif", fontSize: "0.9rem",
+    borderRadius: 3, outline: "none", boxSizing: "border-box",
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", paddingTop: 120, paddingBottom: 80 }}>
+      <div style={{ maxWidth: 800, margin: "0 auto", padding: "0 2rem" }}>
+        <div style={{ textAlign: "center", marginBottom: "3rem" }}>
+          <div style={{ fontFamily: "'Space Mono', monospace", letterSpacing: "0.15em", color: C.cyan, fontSize: "0.7rem", marginBottom: "1rem", textTransform: "uppercase" }}>Token Campaign Setup</div>
+          <h2 style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "clamp(2.5rem, 6vw, 4rem)", color: C.text, margin: 0, letterSpacing: "-0.04em" }}>
+            LAUNCH YOUR <span style={{ color: C.cyan }}>RAID CAMPAIGN</span>
+          </h2>
+        </div>
+
+        {/* Steps */}
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "3rem", justifyContent: "center" }}>
+          {[["01", "Select Tier"], ["02", "Token Info"], ["03", "Pay & Deploy"]].map(([num, label], i) => (
+            <div key={num} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", opacity: step === i + 1 ? 1 : 0.4 }}
+                onClick={() => step > i + 1 && setStep(i + 1)}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 3,
+                  background: step >= i + 1 ? C.cyan : "rgba(255,255,255,0.08)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: "0.7rem",
+                  color: step >= i + 1 ? "#050505" : C.text3,
+                  boxShadow: step >= i + 1 ? `0 0 12px ${C.cyanGlow}` : "none",
+                }}>{num}</div>
+                <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, letterSpacing: "0.06em", fontSize: "0.8rem", color: step === i + 1 ? C.text : C.text3 }}>{label}</span>
+              </div>
+              {i < 2 && <div style={{ width: 40, height: 1, background: C.border }} />}
+            </div>
+          ))}
+        </div>
+
+        {step === 1 && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "2rem" }}>
+              {TIERS.map(tier => (
+                <div key={tier.id} onClick={() => setSelectedTier(tier)} style={{
+                  background: selectedTier?.id === tier.id ? C.cyanDim : "rgba(255,255,255,0.02)",
+                  border: `1px solid ${selectedTier?.id === tier.id ? C.cyan : C.border}`,
+                  borderRadius: 4, padding: "1.5rem", cursor: "pointer",
+                  boxShadow: selectedTier?.id === tier.id ? `0 0 20px ${C.cyanGlow}` : "none",
+                  transition: "all 0.2s",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{tier.icon}</div>
+                      <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.1rem", color: tier.color, letterSpacing: "-0.02em" }}>{tier.name}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.6rem", fontWeight: 700, color: C.text, letterSpacing: "-0.04em" }}>{tier.price}</div>
+                      <div style={{ color: C.cyan, fontSize: "0.75rem", fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>PAX</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => selectedTier && setStep(2)} style={{
+              width: "100%",
+              background: selectedTier ? `linear-gradient(135deg, ${C.cyan}, #0090cc)` : "rgba(255,255,255,0.05)",
+              border: "none", color: selectedTier ? "#050505" : C.text3, padding: "1rem",
+              fontFamily: "'Inter', sans-serif", fontWeight: 800, letterSpacing: "0.12em",
+              fontSize: "0.95rem", cursor: selectedTier ? "pointer" : "not-allowed",
+              clipPath: "polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%)",
+            }}>CONTINUE TO TOKEN INFO →</button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4, padding: "2rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            {[
+              ["TOKEN NAME / TICKER", "tokenName", "e.g. PEPE Token · $PEPE"],
+              ["CONTRACT ADDRESS (optional)", "contractAddress", "0x..."],
+              ["X (TWITTER) HANDLE TO RAID", "xHandle", "@YourTokenHandle"],
+              ["PAXFUN LAUNCHPAD URL", "launchpadUrl", "https://paxfun.app/token/..."],
+            ].map(([label, field, placeholder]) => (
+              <div key={field}>
+                <div style={labelStyle}>{label}</div>
+                <input placeholder={placeholder} value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })}
+                  style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = C.cyanBorder}
+                  onBlur={e => e.target.style.borderColor = C.border} />
+              </div>
+            ))}
+            <div>
+              <div style={labelStyle}>Project Description</div>
+              <textarea rows={4} placeholder="Tell raiders about your project..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                style={{ ...inputStyle, resize: "vertical" }}
+                onFocus={e => e.target.style.borderColor = C.cyanBorder}
+                onBlur={e => e.target.style.borderColor = C.border} />
+            </div>
+            <div>
+              <div style={labelStyle}>Campaign Artwork</div>
+              <div style={{
+                border: `2px dashed ${C.cyanBorder}`, borderRadius: 4, padding: "2rem",
+                textAlign: "center", cursor: "pointer", color: C.text3,
+                fontFamily: "'Inter', sans-serif", letterSpacing: "0.06em", fontSize: "0.85rem",
+                transition: "background 0.2s",
+              }}>
+                <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🖼️</div>
+                DRAG & DROP OR CLICK TO UPLOAD<br />
+                <span style={{ fontSize: "0.75rem", color: C.text3 }}>PNG, JPG, GIF · Max 10MB</span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "1rem" }}>
+              <button onClick={() => setStep(1)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.85rem", fontFamily: "'Inter', sans-serif", fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", borderRadius: 3 }}>← BACK</button>
+              <button onClick={() => setStep(3)} style={{
+                flex: 2, ...btnPrimary, padding: "0.85rem",
+                clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)",
+              }}>CONTINUE TO PAYMENT →</button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4, padding: "2rem" }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.1rem", color: C.text, marginBottom: "1.5rem", letterSpacing: "-0.02em" }}>ORDER SUMMARY</div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
+                <span style={{ color: C.text2, fontFamily: "'Inter', sans-serif" }}>Campaign Tier</span>
+                <span style={{ color: C.text, fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>{selectedTier?.name || "In Your Face"}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
+                <span style={{ color: C.text2, fontFamily: "'Inter', sans-serif" }}>Token</span>
+                <span style={{ color: C.text, fontFamily: "'Inter', sans-serif" }}>{form.tokenName || "—"}</span>
+              </div>
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: "1rem", display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, color: C.text2, letterSpacing: "0.08em" }}>TOTAL</span>
+                <div>
+                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "2rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{selectedTier?.price || "4,000"}</span>
+                  <span style={{ color: C.cyan, fontFamily: "'Inter', sans-serif", fontWeight: 700, marginLeft: "0.4rem" }}>PAX</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, borderRadius: 4, padding: "2rem" }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1rem", color: C.cyan, marginBottom: "1.5rem", letterSpacing: "-0.01em" }}>PAX TOKEN PAYMENT</div>
+
+              {wallet ? (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  background: "rgba(0,224,255,0.05)", border: `1px solid ${C.cyanBorder}`,
+                  borderRadius: 6, padding: "12px 16px", marginBottom: "1rem",
+                }}>
+                  <span style={{ width: 9, height: 9, borderRadius: "50%", background: C.green, boxShadow: `0 0 8px ${C.green}`, flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.8rem", color: C.green }}>WALLET CONNECTED</div>
+                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.78rem", color: C.text2, marginTop: 2 }}>{wallet}</div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={labelStyle}>Your Wallet Address</div>
+                  <input placeholder="Connect your PAX wallet..." style={{ ...inputStyle, borderColor: C.cyanBorder, marginBottom: "1rem" }}
+                    onFocus={e => e.target.style.borderColor = C.cyan}
+                    onBlur={e => e.target.style.borderColor = C.cyanBorder} />
+                  <button onClick={onConnectClick} style={{
+                    width: "100%", background: C.cyanDim,
+                    border: `1px solid ${C.cyanBorder}`, color: C.cyan, padding: "0.85rem",
+                    fontFamily: "'Inter', sans-serif", fontWeight: 700, letterSpacing: "0.12em",
+                    fontSize: "0.9rem", cursor: "pointer", borderRadius: 3, marginBottom: "1rem",
+                  }}>CONNECT WALLET VIA WALLETCONNECT</button>
+                </>
+              )}
+
+              <div style={{ display: "flex", gap: "1rem" }}>
+                <button onClick={() => setStep(2)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.85rem", fontFamily: "'Inter', sans-serif", fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", borderRadius: 3 }}>← BACK</button>
+                <button disabled={!wallet} style={{
+                  flex: 2, ...btnPrimary, padding: "0.85rem",
+                  clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)",
+                  opacity: wallet ? 1 : 0.4, cursor: wallet ? "pointer" : "not-allowed",
+                  filter: "none",
+                }}>SUBMIT PAYMENT & DEPLOY 🚀</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Dev Dashboard ────────────────────────────────────────────────────────────
+const MOCK_CAMPAIGNS = [
+  { id: 1, token: "NOVA Token", ticker: "$NOVA", tier: "In Your Face", status: "active", progress: 68, raiders: 40, reach: "2.4M", spent: "4,000", daysLeft: 3, change: "+24.1%" },
+  { id: 2, token: "AstroDAO",   ticker: "$ASTRO", tier: "Make Some Noise", status: "active", progress: 41, raiders: 15, reach: "840K", spent: "1,500", daysLeft: 1, change: "+8.7%" },
+  { id: 3, token: "MoonFi",     ticker: "$MOON",  tier: "Get The Word Out", status: "completed", progress: 100, raiders: 5, reach: "310K", spent: "500", daysLeft: 0, change: "+5.2%" },
+];
+
+function DevDashboard({ wallet, onConnectClick, setView }) {
+  const [tab, setTab] = useState("overview");
+
+  if (!wallet) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 72 }}>
+      <div style={{ textAlign: "center", maxWidth: 420, padding: "0 2rem" }}>
+        <div style={{ fontSize: "3rem", marginBottom: "1.5rem" }}>🔒</div>
+        <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.8rem", letterSpacing: "-0.03em", marginBottom: "0.75rem" }}>
+          Connect to access your <span style={{ color: C.cyan }}>Dev Dashboard</span>
+        </div>
+        <div style={{ fontFamily: "'Inter', sans-serif", color: C.text2, fontSize: "0.9rem", lineHeight: 1.7, marginBottom: "2rem" }}>
+          Connect your wallet to manage your token campaigns, view performance stats, and deploy new raids.
+        </div>
+        <button onClick={onConnectClick} style={{ ...btnPrimary, padding: "0.9rem 2.5rem", fontSize: "0.95rem" }}>CONNECT WALLET</button>
+      </div>
+    </div>
+  );
+
+  const totalReach   = "3.55M";
+  const totalSpent   = "6,000";
+  const activeCampaigns = MOCK_CAMPAIGNS.filter(c => c.status === "active").length;
+
+  return (
+    <div style={{ minHeight: "100vh", paddingTop: 100, paddingBottom: 80 }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 2rem" }}>
+
+        {/* Header */}
+        <div style={{
+          background: `linear-gradient(135deg, rgba(0,224,255,0.07), rgba(0,144,204,0.03))`,
+          border: `1px solid ${C.cyanBorder}`, borderRadius: 4, padding: "1.75rem 2rem",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginBottom: "2rem", flexWrap: "wrap", gap: "1rem",
+        }}>
+          <div>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.7rem", letterSpacing: "-0.03em" }}>
+              Dev Dashboard
+            </div>
+            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.75rem", color: C.text3, marginTop: 4 }}>
+              {wallet.slice(0, 8)}…{wallet.slice(-6)}
+            </div>
+          </div>
+          <button onClick={() => setView("promote")} style={{ ...btnPrimary, padding: "0.65rem 1.6rem", fontSize: "0.82rem" }}>
+            + NEW CAMPAIGN
+          </button>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: "2rem" }}>
+          {[
+            { label: "Active Campaigns", value: activeCampaigns,  unit: "",      sub: `${MOCK_CAMPAIGNS.length} total`, color: C.cyan },
+            { label: "Total PAX Spent",  value: totalSpent,       unit: " PAX",  sub: "across all campaigns", color: C.cyan },
+            { label: "Total Reach",      value: totalReach,       unit: "",      sub: "estimated impressions", color: C.green },
+            { label: "Avg Engagement",   value: "4.8%",           unit: "",      sub: "+1.2% vs last month", color: C.green },
+          ].map(({ label, value, unit, sub, color }) => (
+            <div key={label} style={{
+              background: "#0c0c0e", border: `1px solid ${C.border}`,
+              borderRadius: 8, padding: "18px 20px",
+              transition: "border-color 0.2s, transform 0.2s",
+            }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = C.cyanBorder; e.currentTarget.style.transform = "translateY(-2px)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.transform = "translateY(0)"; }}
+            >
+              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.7rem", fontWeight: 500, color: C.text3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>{label}</div>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.9rem", fontWeight: 700, color, letterSpacing: "-0.04em", lineHeight: 1 }}>
+                {value}<span style={{ fontSize: "0.9rem", color: C.text2, fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>{unit}</span>
+              </div>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.72rem", color: C.text3, marginTop: 8 }}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: "0.25rem", marginBottom: "1.5rem", borderBottom: `1px solid ${C.border}`, paddingBottom: "0.5rem" }}>
+          {[["overview", "CAMPAIGNS"], ["analytics", "ANALYTICS"]].map(([t, l]) => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              background: "transparent", border: "none",
+              borderBottom: tab === t ? `2px solid ${C.cyan}` : "2px solid transparent",
+              color: tab === t ? C.cyan : C.text3,
+              padding: "0.5rem 1.2rem",
+              fontFamily: "'Inter', sans-serif", fontWeight: 700, letterSpacing: "0.08em",
+              fontSize: "0.75rem", cursor: "pointer",
+            }}>{l}</button>
+          ))}
+        </div>
+
+        {tab === "overview" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {MOCK_CAMPAIGNS.map(c => (
+              <div key={c.id} style={{
+                background: "#0c0c0e",
+                border: `1px solid ${c.status === "active" ? C.cyanBorder : C.border}`,
+                borderRadius: 8, padding: "20px 24px",
+                transition: "transform 0.15s",
+              }}
+                onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+                onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 10,
+                      background: c.status === "active" ? C.cyanDim : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${c.status === "active" ? C.cyanBorder : C.border}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: "0.75rem", color: C.cyan,
+                    }}>{c.ticker.replace("$","")}</div>
+                    <div>
+                      <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.05rem", letterSpacing: "-0.02em" }}>{c.token}</div>
+                      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.72rem", color: C.text3, marginTop: 2 }}>{c.tier}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+                    {[
+                      { label: "Raiders", val: c.raiders },
+                      { label: "Est. Reach", val: c.reach },
+                      { label: "PAX Spent", val: c.spent },
+                      { label: "Price Δ", val: c.change, color: C.green },
+                    ].map(({ label, val, color }) => (
+                      <div key={label} style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: "0.9rem", color: color || C.text }}>{val}</div>
+                        <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.68rem", color: C.text3, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+                      </div>
+                    ))}
+
+                    <div style={{
+                      fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "0.08em",
+                      padding: "4px 10px", borderRadius: 20,
+                      background: c.status === "active" ? "rgba(0,240,160,0.1)" : "rgba(255,255,255,0.05)",
+                      color: c.status === "active" ? C.green : C.text3,
+                      border: `1px solid ${c.status === "active" ? "rgba(0,240,160,0.25)" : C.border}`,
+                    }}>
+                      {c.status === "active" ? `● ACTIVE · ${c.daysLeft}d left` : "✓ COMPLETED"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.7rem", color: C.text3 }}>Campaign progress</span>
+                    <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.7rem", color: C.cyan }}>{c.progress}%</span>
+                  </div>
+                  <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%", width: `${c.progress}%`,
+                      background: c.progress === 100
+                        ? `linear-gradient(90deg, ${C.green}, #22c55e)`
+                        : `linear-gradient(90deg, ${C.cyan}, #0090cc)`,
+                      borderRadius: 99,
+                      boxShadow: c.progress < 100 ? `0 0 8px ${C.cyanGlow}` : "none",
+                      transition: "width 0.6s ease",
+                    }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "analytics" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+
+            {/* Reach over time chart */}
+            <div style={{ background: "#0c0c0e", border: `1px solid ${C.border}`, borderRadius: 8, padding: "20px 22px" }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.95rem", marginBottom: 16, letterSpacing: "-0.01em" }}>
+                Reach Over Time
+              </div>
+              <div style={{ height: 150, position: "relative" }}>
+                <svg viewBox="0 0 400 150" width="100%" height="150" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="reachGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={C.cyan} stopOpacity="0.2"/>
+                      <stop offset="100%" stopColor={C.cyan} stopOpacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <line x1="0" y1="50" x2="400" y2="50" stroke="rgba(255,255,255,0.04)" strokeWidth="1"/>
+                  <line x1="0" y1="100" x2="400" y2="100" stroke="rgba(255,255,255,0.04)" strokeWidth="1"/>
+                  <path d="M0,140 C50,130 100,110 150,95 C200,80 240,88 280,65 C320,42 360,35 400,20 L400,150 L0,150 Z" fill="url(#reachGrad)"/>
+                  <path d="M0,140 C50,130 100,110 150,95 C200,80 240,88 280,65 C320,42 360,35 400,20" fill="none" stroke={C.cyan} strokeWidth="2" strokeLinecap="round"/>
+                  <circle cx="400" cy="20" r="4" fill={C.cyan}/>
+                  <circle cx="400" cy="20" r="8" fill={C.cyan} opacity="0.2"/>
+                </svg>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                {["Day 1","Day 3","Day 5","Day 7","Today"].map(d => (
+                  <span key={d} style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.65rem", color: C.text3 }}>{d}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Engagement breakdown */}
+            <div style={{ background: "#0c0c0e", border: `1px solid ${C.border}`, borderRadius: 8, padding: "20px 22px" }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.95rem", marginBottom: 20, letterSpacing: "-0.01em" }}>
+                Engagement Breakdown
+              </div>
+              {[
+                { label: "Quote Tweets", pct: 42, color: C.cyan },
+                { label: "Replies",      pct: 28, color: C.purple },
+                { label: "Original Posts", pct: 18, color: C.green },
+                { label: "Spaces",       pct: 12, color: "#f59e0b" },
+              ].map(({ label, pct, color }) => (
+                <div key={label} style={{ marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.78rem", color: C.text2 }}>{label}</span>
+                    <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.75rem", color }}>{pct}%</span>
+                  </div>
+                  <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99 }}>
+                    <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 99, boxShadow: `0 0 6px ${color}55` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Top performing raiders for your campaigns */}
+            <div style={{ background: "#0c0c0e", border: `1px solid ${C.border}`, borderRadius: 8, padding: "20px 22px", gridColumn: "1 / -1" }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.95rem", marginBottom: 16, letterSpacing: "-0.01em" }}>
+                Top Raiders on Your Campaigns
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                {MOCK_RAIDERS.slice(0,4).map(r => (
+                  <div key={r.rank} style={{
+                    background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`,
+                    borderRadius: 6, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10,
+                  }}>
+                    <span style={{ fontSize: "1.4rem" }}>{r.avatar}</span>
+                    <div>
+                      <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.83rem" }}>{r.name}</div>
+                      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.68rem", color: C.cyan, marginTop: 2 }}>{r.followers} followers</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+
+// ─── App (inner — has access to wagmi hooks) ──────────────────────────────────
+function AppInner() {
+  const [view, setView] = useState("home");
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { open } = useWeb3Modal();
+
+  const wallet = isConnected ? address : null;
+  const onConnectClick = () => open();
+  const onDisconnect = () => disconnect();
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #050505; color: #fff; }
+        html { scroll-behavior: smooth; }
+        input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.2); }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        button:hover { filter: brightness(1.08); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #050505; }
+        ::-webkit-scrollbar-thumb { background: rgba(0,224,255,0.25); border-radius: 2px; }
+      `}</style>
+
+      <Navbar view={view} setView={setView} wallet={wallet} onConnectClick={onConnectClick} onDisconnect={onDisconnect} />
+      {view === "home" && (
+        <>
+          <Hero setView={setView} onConnectClick={onConnectClick} />
+          <TiersPage setView={setView} />
+        </>
+      )}
+      {view === "tiers"       && <TiersPage setView={setView} />}
+      {view === "leaderboard" && <Leaderboard />}
+      {view === "dev"         && <DevDashboard wallet={wallet} onConnectClick={onConnectClick} setView={setView} />}
+      {view === "raider"      && <RaiderDashboard wallet={wallet} onConnectClick={onConnectClick} />}
+      {view === "promote"     && <PromotePage wallet={wallet} onConnectClick={onConnectClick} />}
+    </>
+  );
+}
+
+// ─── App (root — provides wagmi + query context) ──────────────────────────────
+export default function App() {
+  return (
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <AppInner />
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
