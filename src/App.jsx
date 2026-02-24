@@ -2,21 +2,34 @@ import { useState, useEffect, useRef } from "react";
 import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { defaultWagmiConfig } from "@web3modal/wagmi/react/config";
 import { WagmiProvider, useAccount, useDisconnect } from "wagmi";
-import { mainnet } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
 
 // ─── WalletConnect / Web3Modal setup ─────────────────────────────────────────
 const projectId = "60ce60abcf144f20677ce7e052a00f35";
 
+// ─── HyperPaxeer custom chain ─────────────────────────────────────────────────
+const hyperPaxeer = {
+  id: 125,
+  name: "HyperPaxeer Network",
+  nativeCurrency: { name: "PAX", symbol: "PAX", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["https://mainnet-beta.rpc.hyperpaxeer.com/rpc"] },
+    public:  { http: ["https://mainnet-beta.rpc.hyperpaxeer.com/rpc"] },
+  },
+  blockExplorers: {
+    default: { name: "PaxScan", url: "https://paxscan.paxeer.app" },
+  },
+};
+
 const metadata = {
   name: "PAXpromote",
   description: "The premier promotion network for Paxfun tokens",
-  url: "https://paxpromote.paxeer.app",
+  url: "https://paxpromote.io",
   icons: ["https://brand.paxeer.app/assets/500x5000_texr_logo_darkBG.png"],
 };
 
-const chains = [mainnet];
+const chains = [hyperPaxeer];
 const wagmiConfig = defaultWagmiConfig({ chains, projectId, metadata });
 const queryClient = new QueryClient();
 
@@ -146,7 +159,7 @@ const labelStyle = {
 };
 
 // ─── Navbar ──────────────────────────────────────────────────────────────────
-function Navbar({ view, setView, wallet, onConnectClick, onDisconnect }) {
+function Navbar({ view, setView, wallet, profile, onConnectClick, onDisconnect }) {
   const [scrolled, setScrolled] = useState(false);
   const [dashOpen, setDashOpen] = useState(false);
   const dashRef = useRef(null);
@@ -264,15 +277,48 @@ function Navbar({ view, setView, wallet, onConnectClick, onDisconnect }) {
 
         {wallet ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{
+            {/* Profile avatar / name button */}
+            <button onClick={() => setView("profile")} style={{
               display: "flex", alignItems: "center", gap: 8,
+              background: view === "profile" ? C.cyanDim : "rgba(255,255,255,0.04)",
+              border: `1px solid ${view === "profile" ? C.cyanBorder : C.border}`,
+              borderRadius: 6, padding: "5px 10px 5px 6px",
+              cursor: "pointer", transition: "all 0.2s",
+            }}>
+              {/* Avatar circle */}
+              <div style={{
+                width: 28, height: 28, borderRadius: "50%",
+                border: `1.5px solid ${C.cyanBorder}`,
+                background: "rgba(0,224,255,0.1)",
+                overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}>
+                {profile?.avatar
+                  ? <img src={profile.avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <span style={{ fontSize: "0.85rem" }}>👤</span>
+                }
+              </div>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.78rem", color: profile?.username ? C.text : C.text3 }}>
+                  {profile?.username || "Set up profile"}
+                </div>
+                {profile?.xHandle && (
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.65rem", color: C.cyan }}>@{profile.xHandle}</div>
+                )}
+              </div>
+            </button>
+
+            {/* Wallet address pill */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
               background: C.cyanDim, border: `1px solid ${C.cyanBorder}`,
-              borderRadius: 6, padding: "6px 12px",
-              fontFamily: "'Space Mono', monospace", fontSize: "0.75rem", color: C.cyan,
+              borderRadius: 6, padding: "6px 10px",
+              fontFamily: "'Space Mono', monospace", fontSize: "0.72rem", color: C.cyan,
             }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
               {wallet.slice(0, 6)}…{wallet.slice(-4)}
             </div>
+
             <button onClick={onDisconnect} style={{
               background: "transparent", border: `1px solid ${C.border}`,
               color: C.text3, padding: "6px 10px", borderRadius: 6,
@@ -1158,16 +1204,419 @@ function DevDashboard({ wallet, onConnectClick, setView }) {
 }
 
 
+// ─── Profile Setup Modal ──────────────────────────────────────────────────────
+function ProfileSetupModal({ wallet, onSave, onSkip }) {
+  const [username, setUsername]   = useState("");
+  const [xHandle, setXHandle]     = useState("");
+  const [avatar, setAvatar]       = useState(null);   // base64 data URL
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [step, setStep]           = useState(1);       // 1=username, 2=photo, 3=x
+  const [usernameError, setUsernameError] = useState("");
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setAvatar(ev.target.result);
+      setAvatarPreview(ev.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleNext = () => {
+    if (step === 1) {
+      if (!username.trim()) { setUsernameError("Username is required"); return; }
+      if (username.length < 3) { setUsernameError("Must be at least 3 characters"); return; }
+      setUsernameError("");
+      setStep(2);
+    } else if (step === 2) {
+      setStep(3);
+    }
+  };
+
+  const handleSave = () => {
+    onSave({
+      username: username.trim(),
+      xHandle: xHandle.trim().replace(/^@/, ""),
+      avatar: avatar || null,
+      wallet,
+      createdAt: Date.now(),
+    });
+  };
+
+  const steps = ["Username", "Photo", "Connect X"];
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 2000,
+      background: "rgba(0,0,0,0.9)", backdropFilter: "blur(10px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        background: "#0c0c0e", border: `1px solid ${C.cyanBorder}`,
+        borderRadius: 14, width: 460, overflow: "hidden",
+        boxShadow: `0 0 80px ${C.cyanGlow}`,
+        animation: "modalIn 0.25s ease",
+      }}>
+        {/* Header */}
+        <div style={{ padding: "24px 28px 0" }}>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.3rem", letterSpacing: "-0.03em", marginBottom: 4 }}>
+            Create your profile
+          </div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.8rem", color: C.text3, marginBottom: 24 }}>
+            {wallet.slice(0,6)}…{wallet.slice(-4)}
+          </div>
+
+          {/* Step indicators */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
+            {steps.map((s, i) => (
+              <div key={s} style={{ flex: 1 }}>
+                <div style={{
+                  height: 3, borderRadius: 99, marginBottom: 6,
+                  background: i + 1 <= step ? C.cyan : "rgba(255,255,255,0.08)",
+                  boxShadow: i + 1 <= step ? `0 0 8px ${C.cyanGlow}` : "none",
+                  transition: "all 0.3s",
+                }} />
+                <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.65rem", color: i + 1 === step ? C.cyan : C.text3, fontWeight: i + 1 === step ? 700 : 400 }}>{s}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "0 28px 28px" }}>
+
+          {/* Step 1 — Username */}
+          {step === 1 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <div style={labelStyle}>Choose a username</div>
+                <input
+                  value={username}
+                  onChange={e => { setUsername(e.target.value); setUsernameError(""); }}
+                  placeholder="e.g. CryptoViper"
+                  maxLength={24}
+                  style={{
+                    width: "100%", background: "rgba(255,255,255,0.04)",
+                    border: `1px solid ${usernameError ? "#ff4060" : C.border}`,
+                    color: C.text, padding: "0.8rem 1rem",
+                    fontFamily: "'Inter', sans-serif", fontSize: "1rem",
+                    borderRadius: 6, outline: "none", boxSizing: "border-box",
+                    transition: "border-color 0.2s",
+                  }}
+                  onFocus={e => e.target.style.borderColor = C.cyan}
+                  onBlur={e => e.target.style.borderColor = usernameError ? "#ff4060" : C.border}
+                  onKeyDown={e => e.key === "Enter" && handleNext()}
+                  autoFocus
+                />
+                {usernameError && <div style={{ color: "#ff4060", fontSize: "0.75rem", marginTop: 6, fontFamily: "'Inter', sans-serif" }}>{usernameError}</div>}
+                <div style={{ color: C.text3, fontSize: "0.72rem", marginTop: 6, fontFamily: "'Inter', sans-serif" }}>
+                  {username.length}/24 characters · Letters, numbers, underscores only
+                </div>
+              </div>
+              <button onClick={handleNext} style={{ ...btnPrimary, padding: "0.85rem", width: "100%", clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)" }}>
+                CONTINUE →
+              </button>
+              <button onClick={onSkip} style={{ background: "none", border: "none", color: C.text3, fontFamily: "'Inter', sans-serif", fontSize: "0.8rem", cursor: "pointer", textAlign: "center" }}>
+                Skip for now
+              </button>
+            </div>
+          )}
+
+          {/* Step 2 — Photo */}
+          {step === 2 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center" }}>
+              {/* Avatar preview */}
+              <div style={{
+                width: 100, height: 100, borderRadius: "50%",
+                border: `2px solid ${avatarPreview ? C.cyan : C.border}`,
+                background: avatarPreview ? "transparent" : "rgba(255,255,255,0.04)",
+                overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: avatarPreview ? `0 0 20px ${C.cyanGlow}` : "none",
+                transition: "all 0.3s",
+              }}>
+                {avatarPreview
+                  ? <img src={avatarPreview} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <span style={{ fontSize: "2.5rem", opacity: 0.3 }}>👤</span>
+                }
+              </div>
+
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "1rem", marginBottom: 4 }}>{username}</div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.7rem", color: C.text3 }}>{wallet.slice(0,6)}…{wallet.slice(-4)}</div>
+              </div>
+
+              <label style={{
+                background: C.cyanDim, border: `1px solid ${C.cyanBorder}`,
+                color: C.cyan, padding: "0.75rem 2rem",
+                fontFamily: "'Inter', sans-serif", fontWeight: 700,
+                fontSize: "0.82rem", letterSpacing: "0.08em", cursor: "pointer",
+                borderRadius: 6, display: "inline-block",
+              }}>
+                UPLOAD PHOTO
+                <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: "none" }} />
+              </label>
+
+              <div style={{ display: "flex", gap: 10, width: "100%" }}>
+                <button onClick={() => setStep(1)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.75rem", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer", borderRadius: 6 }}>← Back</button>
+                <button onClick={handleNext} style={{ flex: 2, ...btnPrimary, padding: "0.75rem", clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)" }}>
+                  {avatarPreview ? "LOOKS GOOD →" : "SKIP PHOTO →"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3 — Connect X */}
+          {step === 3 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ textAlign: "center", marginBottom: 8 }}>
+                {/* Avatar summary */}
+                <div style={{
+                  width: 64, height: 64, borderRadius: "50%",
+                  border: `2px solid ${C.cyanBorder}`,
+                  background: "rgba(255,255,255,0.04)",
+                  overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+                  margin: "0 auto 10px",
+                }}>
+                  {avatarPreview
+                    ? <img src={avatarPreview} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span style={{ fontSize: "1.8rem" }}>👤</span>
+                  }
+                </div>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "1rem" }}>{username}</div>
+              </div>
+
+              <div>
+                <div style={labelStyle}>X (Twitter) Handle</div>
+                <div style={{ position: "relative" }}>
+                  <span style={{
+                    position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+                    color: C.text3, fontFamily: "'Inter', sans-serif", fontSize: "1rem",
+                  }}>@</span>
+                  <input
+                    value={xHandle}
+                    onChange={e => setXHandle(e.target.value.replace(/^@/, ""))}
+                    placeholder="YourHandle"
+                    style={{
+                      width: "100%", background: "rgba(255,255,255,0.04)",
+                      border: `1px solid ${C.border}`,
+                      color: C.text, padding: "0.8rem 1rem 0.8rem 2rem",
+                      fontFamily: "'Inter', sans-serif", fontSize: "0.95rem",
+                      borderRadius: 6, outline: "none", boxSizing: "border-box",
+                    }}
+                    onFocus={e => e.target.style.borderColor = C.cyan}
+                    onBlur={e => e.target.style.borderColor = C.border}
+                  />
+                </div>
+                <div style={{ color: C.text3, fontSize: "0.72rem", marginTop: 6, fontFamily: "'Inter', sans-serif" }}>
+                  Required to participate as a Raider and earn PAX
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => setStep(2)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.75rem", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer", borderRadius: 6 }}>← Back</button>
+                <button onClick={handleSave} style={{ flex: 2, ...btnPrimary, padding: "0.75rem", clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)" }}>
+                  CREATE PROFILE 🚀
+                </button>
+              </div>
+              <button onClick={onSkip} style={{ background: "none", border: "none", color: C.text3, fontFamily: "'Inter', sans-serif", fontSize: "0.8rem", cursor: "pointer", textAlign: "center" }}>
+                Skip for now
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Profile Page ─────────────────────────────────────────────────────────────
+function ProfilePage({ wallet, profile, onSaveProfile, onConnectClick }) {
+  const [editing, setEditing]     = useState(false);
+  const [username, setUsername]   = useState(profile?.username || "");
+  const [xHandle, setXHandle]     = useState(profile?.xHandle || "");
+  const [avatarPreview, setAvatarPreview] = useState(profile?.avatar || null);
+  const [newAvatar, setNewAvatar] = useState(null);
+  const [saved, setSaved]         = useState(false);
+
+  if (!wallet) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 72 }}>
+      <div style={{ textAlign: "center", maxWidth: 420, padding: "0 2rem" }}>
+        <div style={{ fontSize: "3rem", marginBottom: "1.5rem" }}>👤</div>
+        <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.8rem", letterSpacing: "-0.03em", marginBottom: "0.75rem" }}>
+          Connect to view your <span style={{ color: C.cyan }}>Profile</span>
+        </div>
+        <div style={{ fontFamily: "'Inter', sans-serif", color: C.text2, fontSize: "0.9rem", lineHeight: 1.7, marginBottom: "2rem" }}>
+          Connect your wallet to create and manage your PAXpromote profile.
+        </div>
+        <button onClick={onConnectClick} style={{ ...btnPrimary, padding: "0.9rem 2.5rem", fontSize: "0.95rem" }}>CONNECT WALLET</button>
+      </div>
+    </div>
+  );
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => { setAvatarPreview(ev.target.result); setNewAvatar(ev.target.result); };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = () => {
+    onSaveProfile({ ...profile, username, xHandle: xHandle.replace(/^@/, ""), avatar: newAvatar || profile?.avatar });
+    setEditing(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", paddingTop: 100, paddingBottom: 80 }}>
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 2rem" }}>
+
+        {/* Profile card */}
+        <div style={{
+          background: `linear-gradient(135deg, rgba(0,224,255,0.06), rgba(5,5,5,0.95))`,
+          border: `1px solid ${C.cyanBorder}`, borderRadius: 14,
+          padding: "2.5rem", marginBottom: 24, textAlign: "center",
+        }}>
+          {/* Avatar */}
+          <div style={{ position: "relative", display: "inline-block", marginBottom: 20 }}>
+            <div style={{
+              width: 100, height: 100, borderRadius: "50%",
+              border: `3px solid ${C.cyan}`,
+              background: "rgba(255,255,255,0.04)",
+              overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: `0 0 30px ${C.cyanGlow}`,
+            }}>
+              {avatarPreview
+                ? <img src={avatarPreview} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <span style={{ fontSize: "3rem" }}>👤</span>
+              }
+            </div>
+            {editing && (
+              <label style={{
+                position: "absolute", bottom: 0, right: 0,
+                width: 30, height: 30, borderRadius: "50%",
+                background: C.cyan, display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", fontSize: "0.75rem",
+                boxShadow: `0 0 10px ${C.cyanGlow}`,
+              }}>
+                ✏️
+                <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: "none" }} />
+              </label>
+            )}
+          </div>
+
+          {!editing ? (
+            <>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.8rem", letterSpacing: "-0.03em", marginBottom: 6 }}>
+                {profile?.username || "Anonymous"}
+              </div>
+              {profile?.xHandle && (
+                <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.9rem", color: C.cyan, marginBottom: 8 }}>
+                  @{profile.xHandle}
+                </div>
+              )}
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.72rem", color: C.text3, marginBottom: 20 }}>
+                {wallet.slice(0, 10)}…{wallet.slice(-8)}
+              </div>
+              <button onClick={() => setEditing(true)} style={{
+                background: C.cyanDim, border: `1px solid ${C.cyanBorder}`,
+                color: C.cyan, padding: "0.6rem 1.8rem", borderRadius: 6,
+                fontFamily: "'Inter', sans-serif", fontWeight: 700,
+                fontSize: "0.8rem", letterSpacing: "0.08em", cursor: "pointer",
+              }}>EDIT PROFILE</button>
+            </>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, textAlign: "left" }}>
+              <div>
+                <div style={labelStyle}>Username</div>
+                <input value={username} onChange={e => setUsername(e.target.value)} maxLength={24}
+                  style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.text, padding: "0.75rem 1rem", fontFamily: "'Inter', sans-serif", fontSize: "0.95rem", borderRadius: 6, outline: "none", boxSizing: "border-box" }}
+                  onFocus={e => e.target.style.borderColor = C.cyan}
+                  onBlur={e => e.target.style.borderColor = C.border} />
+              </div>
+              <div>
+                <div style={labelStyle}>X (Twitter) Handle</div>
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: C.text3 }}>@</span>
+                  <input value={xHandle} onChange={e => setXHandle(e.target.value.replace(/^@/, ""))}
+                    style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.text, padding: "0.75rem 1rem 0.75rem 2rem", fontFamily: "'Inter', sans-serif", fontSize: "0.95rem", borderRadius: 6, outline: "none", boxSizing: "border-box" }}
+                    onFocus={e => e.target.style.borderColor = C.cyan}
+                    onBlur={e => e.target.style.borderColor = C.border} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => { setEditing(false); setUsername(profile?.username || ""); setXHandle(profile?.xHandle || ""); setAvatarPreview(profile?.avatar || null); }}
+                  style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.75rem", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: "0.82rem", cursor: "pointer", borderRadius: 6 }}>CANCEL</button>
+                <button onClick={handleSave}
+                  style={{ flex: 2, ...btnPrimary, padding: "0.75rem", clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)" }}>SAVE CHANGES</button>
+              </div>
+            </div>
+          )}
+
+          {saved && (
+            <div style={{ marginTop: 16, color: C.green, fontFamily: "'Inter', sans-serif", fontSize: "0.85rem", fontWeight: 600 }}>
+              ✓ Profile saved!
+            </div>
+          )}
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {[
+            { label: "Campaigns Launched", value: "0" },
+            { label: "Raids Completed", value: "0" },
+            { label: "PAX Earned", value: "0" },
+          ].map(({ label, value }) => (
+            <div key={label} style={{ background: "#0c0c0e", border: `1px solid ${C.border}`, borderRadius: 10, padding: "18px 16px", textAlign: "center" }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.6rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{value}</div>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.7rem", color: C.text3, marginTop: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── App (inner — has access to wagmi hooks) ──────────────────────────────────
 function AppInner() {
-  const [view, setView] = useState("home");
+  const [view, setView]                   = useState("home");
+  const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [profile, setProfile]             = useState(() => {
+    try { return JSON.parse(localStorage.getItem("paxpromote_profile")) || null; } catch { return null; }
+  });
+
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const { open } = useWeb3Modal();
 
   const wallet = isConnected ? address : null;
   const onConnectClick = () => open();
-  const onDisconnect = () => disconnect();
+  const onDisconnect = () => { disconnect(); };
+
+  // Show profile setup modal on first connect
+  useEffect(() => {
+    if (isConnected && address && !profile) {
+      const timer = setTimeout(() => setShowProfileSetup(true), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [isConnected, address, profile]);
+
+  const handleSaveProfile = (profileData) => {
+    setProfile(profileData);
+    localStorage.setItem("paxpromote_profile", JSON.stringify(profileData));
+    setShowProfileSetup(false);
+  };
+
+  const handleSkipProfile = () => {
+    const skipped = { skipped: true, wallet: address };
+    setProfile(skipped);
+    localStorage.setItem("paxpromote_profile", JSON.stringify(skipped));
+    setShowProfileSetup(false);
+  };
 
   return (
     <>
@@ -1186,7 +1635,11 @@ function AppInner() {
         ::-webkit-scrollbar-thumb { background: rgba(0,224,255,0.25); border-radius: 2px; }
       `}</style>
 
-      <Navbar view={view} setView={setView} wallet={wallet} onConnectClick={onConnectClick} onDisconnect={onDisconnect} />
+      {showProfileSetup && wallet && (
+        <ProfileSetupModal wallet={wallet} onSave={handleSaveProfile} onSkip={handleSkipProfile} />
+      )}
+
+      <Navbar view={view} setView={setView} wallet={wallet} profile={profile} onConnectClick={onConnectClick} onDisconnect={onDisconnect} />
       {view === "home" && (
         <>
           <Hero setView={setView} onConnectClick={onConnectClick} />
@@ -1198,6 +1651,7 @@ function AppInner() {
       {view === "dev"         && <DevDashboard wallet={wallet} onConnectClick={onConnectClick} setView={setView} />}
       {view === "raider"      && <RaiderDashboard wallet={wallet} onConnectClick={onConnectClick} />}
       {view === "promote"     && <PromotePage wallet={wallet} onConnectClick={onConnectClick} />}
+      {view === "profile"     && <ProfilePage wallet={wallet} profile={profile} onSaveProfile={handleSaveProfile} onConnectClick={onConnectClick} />}
     </>
   );
 }
