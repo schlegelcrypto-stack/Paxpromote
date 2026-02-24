@@ -68,7 +68,7 @@ const TIERS = [
     color: "#4ade80",
     glow: "rgba(74,222,128,0.3)",
     icon: "📡",
-    features: ["3-5 Raiders assigned", "Basic X amplification", "Project card listing", "Performance report"],
+    features: ["3-5 Raiders assigned", "Basic X amplification", "Project card listing", "Performance report", "Telegram moderation"],
   },
   {
     id: "make-noise",
@@ -79,7 +79,7 @@ const TIERS = [
     glow: "rgba(61,139,94,0.3)",
     icon: "🔊",
     comingSoon: true,
-    features: ["10-15 Raiders assigned", "Boosted X amplification", "Trending hashtag push", "Artwork promotion", "Detailed analytics"],
+    features: ["10-15 Raiders assigned", "Boosted X amplification", "Trending hashtag push", "Artwork promotion", "Detailed analytics", "Telegram moderation"],
   },
   {
     id: "in-your-face",
@@ -91,7 +91,7 @@ const TIERS = [
     icon: "🔥",
     featured: true,
     comingSoon: true,
-    features: ["30-40 Raiders assigned", "Premium X raids", "Priority placement", "Meme & content package", "Analytics"],
+    features: ["30-40 Raiders assigned", "Premium X raids", "Priority placement", "Meme & content package", "Analytics", "Telegram management"],
   },
   {
     id: "kol-package",
@@ -332,16 +332,23 @@ function Navbar({ view, setView, wallet, profile, onConnectClick, onDisconnect }
                 <button onClick={() => setView("profile")} style={{
                   display: "flex", alignItems: "center", gap: 8,
                   background: view === "profile" ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${C.border}`,
+                  border: `1px solid ${profile?.username ? C.cyanBorder : C.border}`,
                   borderRadius: 999, padding: "4px 12px 4px 4px",
                   cursor: "pointer", transition: "all 0.15s",
                 }}>
                   <div style={{ width: 28, height: 28, borderRadius: "50%", background: C.cyanDim, border: `1.5px solid ${C.cyanBorder}`, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     {profile?.avatar ? <img src={profile.avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: "0.85rem" }}>👤</span>}
                   </div>
-                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.85rem", color: C.text }}>
-                    {wallet.slice(0,6)}…{wallet.slice(-4)}
-                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.85rem", color: C.text, lineHeight: 1 }}>
+                      {profile?.username || `${wallet.slice(0,6)}…${wallet.slice(-4)}`}
+                    </span>
+                    {profile?.username && (
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.65rem", color: C.text3, lineHeight: 1 }}>
+                        {wallet.slice(0,6)}…{wallet.slice(-4)}
+                      </span>
+                    )}
+                  </div>
                   <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
                 </button>
                 <button onClick={onDisconnect} style={{
@@ -948,14 +955,16 @@ function TiersPage({ setView }) {
             {/* Coming Soon diagonal banner */}
             {tier.comingSoon && (
               <div style={{
-                position: "absolute", top: 24, right: -32,
-                background: "rgba(185,28,28,0.7)",
-                color: "rgba(255,255,255,0.9)",
-                fontFamily: "'DM Mono', monospace", fontSize: "0.6rem", fontWeight: 600,
-                letterSpacing: "0.08em", padding: "5px 40px",
+                position: "absolute", top: 28, right: -36,
+                background: "rgba(153,27,27,0.92)",
+                color: "#ffffff",
+                fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", fontWeight: 800,
+                letterSpacing: "0.12em", padding: "7px 52px",
                 transform: "rotate(35deg)",
                 pointerEvents: "none", whiteSpace: "nowrap",
                 zIndex: 2,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+                textShadow: "0 1px 2px rgba(0,0,0,0.3)",
               }}>COMING SOON</div>
             )}
 
@@ -1412,46 +1421,95 @@ function PromotePage({ wallet, onConnectClick }) {
 
         {/* Step 1 — Tier */}
         {step === 1 && (
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: "1rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: "1.25rem" }}>
             {TIERS.map(tier => (
               <div key={tier.id}
                 onClick={() => { if (!tier.comingSoon) { setSelectedTier(tier); setStep(2); } }}
                 style={{
                   position: "relative", overflow: "hidden",
-                  background: selectedTier?.id === tier.id ? `rgba(61,139,94,0.10)` : "#111113",
-                  border: `1px solid ${selectedTier?.id === tier.id ? C.cyan : tier.comingSoon ? C.border : C.cyan}`,
-                  borderRadius: 14, padding: "1.5rem",
+                  background: selectedTier?.id === tier.id
+                    ? `linear-gradient(180deg, rgba(61,139,94,0.12) 0%, rgba(5,5,5,0.95) 100%)`
+                    : tier.featured && !tier.comingSoon
+                      ? `linear-gradient(180deg, rgba(61,139,94,0.08) 0%, rgba(5,5,5,0.95) 100%)`
+                      : "rgba(255,255,255,0.02)",
+                  border: `1px solid ${selectedTier?.id === tier.id ? C.cyan : tier.comingSoon ? C.border : tier.featured ? C.cyan : C.border}`,
+                  borderRadius: 14,
+                  padding: "2rem",
                   cursor: tier.comingSoon ? "default" : "pointer",
-                  transition: "all 0.15s",
-                  opacity: tier.comingSoon ? 0.6 : 1,
+                  transition: "all 0.2s",
+                  opacity: tier.comingSoon ? 0.55 : 1,
+                  boxShadow: selectedTier?.id === tier.id ? `0 0 40px ${C.cyanGlow}` : tier.featured && !tier.comingSoon ? `0 0 30px ${C.cyanGlow}` : "none",
                 }}>
 
                 {/* Coming Soon diagonal banner */}
                 {tier.comingSoon && (
                   <div style={{
-                    position: "absolute", top: 18, right: -28,
-                    background: "rgba(185,28,28,0.75)",
-                    color: "rgba(255,255,255,0.9)",
-                    fontFamily: "'DM Mono', monospace", fontSize: "0.58rem", fontWeight: 600,
-                    letterSpacing: "0.08em", padding: "4px 36px",
+                    position: "absolute", top: 22, right: -34,
+                    background: "rgba(153,27,27,0.92)",
+                    color: "#ffffff",
+                    fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", fontWeight: 800,
+                    letterSpacing: "0.12em", padding: "7px 52px",
                     transform: "rotate(35deg)",
                     pointerEvents: "none", whiteSpace: "nowrap",
                     zIndex: 2,
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+                    textShadow: "0 1px 2px rgba(0,0,0,0.3)",
                   }}>COMING SOON</div>
                 )}
 
-                {!tier.comingSoon && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.6rem", color: C.cyan, letterSpacing: "0.08em", marginBottom: 12 }}>★ AVAILABLE NOW</div>}
-                <div style={{ fontSize: "1.8rem", marginBottom: 8 }}>{tier.icon}</div>
-                <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "1.1rem", color: tier.color, marginBottom: 4 }}>{tier.name}</div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.4rem", fontWeight: 700, color: C.text, marginBottom: 4 }}>
-                  {tier.price}{tier.price !== "Varies" && <span style={{ fontSize: "0.9rem", color: C.text2 }}> PAX</span>}
-                </div>
-                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.text3, marginBottom: 12 }}>{tier.tagline}</div>
-                {tier.features.slice(0, 3).map(f => (
-                  <div key={f} style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.text2, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ color: tier.comingSoon ? C.text3 : C.cyan, fontSize: "0.65rem" }}>✓</span> {f}
+                {/* Available now / selected badge */}
+                {!tier.comingSoon && (
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.6rem", color: C.cyan, letterSpacing: "0.08em", marginBottom: "1rem" }}>
+                    {selectedTier?.id === tier.id ? "✓ SELECTED" : "★ AVAILABLE NOW"}
                   </div>
-                ))}
+                )}
+
+                {/* Icon + name + tagline */}
+                <div style={{ fontSize: "2rem", marginBottom: "0.75rem" }}>{tier.icon}</div>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1.3rem", color: tier.color, letterSpacing: "-0.02em", lineHeight: 1, marginBottom: "0.3rem" }}>{tier.name}</div>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.85rem", color: C.text2, marginBottom: "1.5rem" }}>{tier.tagline}</div>
+
+                {/* Price */}
+                <div style={{ marginBottom: "1.5rem" }}>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "2.6rem", fontWeight: 700, color: C.text, letterSpacing: "-0.04em", lineHeight: 1 }}>{tier.price}</span>
+                  {tier.price !== "Varies" && <span style={{ color: C.cyan, fontFamily: "'DM Sans', sans-serif", fontWeight: 700, marginLeft: "0.5rem", fontSize: "1rem" }}>PAX</span>}
+                </div>
+
+                {/* All features */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "1.5rem" }}>
+                  {tier.features.map(f => (
+                    <div key={f} style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                      <div style={{
+                        width: 16, height: 16, borderRadius: 10, flexShrink: 0,
+                        background: tier.comingSoon ? "#333" : tier.color,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <span style={{ fontSize: "0.6rem", color: "#fff", fontWeight: 900 }}>✓</span>
+                      </div>
+                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.85rem", color: tier.comingSoon ? C.text3 : C.text2 }}>{f}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* CTA button */}
+                <button
+                  disabled={tier.comingSoon}
+                  style={{
+                    width: "100%",
+                    background: tier.comingSoon ? "transparent"
+                      : selectedTier?.id === tier.id ? `linear-gradient(135deg, ${C.cyan}, #2d6e4a)`
+                      : tier.featured ? `linear-gradient(135deg, ${C.cyan}, #2d6e4a)`
+                      : "transparent",
+                    border: `1px solid ${tier.comingSoon ? "#333" : tier.color}`,
+                    color: tier.comingSoon ? "#555" : selectedTier?.id === tier.id || tier.featured ? "#fff" : tier.color,
+                    padding: "0.9rem",
+                    fontFamily: "'DM Sans', sans-serif", fontWeight: 800,
+                    letterSpacing: "0.05em", fontSize: "0.85rem",
+                    cursor: tier.comingSoon ? "default" : "pointer",
+                    borderRadius: 8,
+                  }}>
+                  {tier.comingSoon ? "COMING SOON" : selectedTier?.id === tier.id ? "✓ SELECTED — CONTINUE →" : "SELECT THIS TIER"}
+                </button>
               </div>
             ))}
           </div>
@@ -1865,8 +1923,14 @@ function ProfileSetupModal({ wallet, onSave, onSkip }) {
           <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1.3rem", letterSpacing: "-0.03em", marginBottom: 4 }}>
             Create your profile
           </div>
-          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.text3, marginBottom: 24 }}>
-            {wallet.slice(0,6)}…{wallet.slice(-4)}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.78rem", color: C.text3 }}>
+              {wallet.slice(0,6)}…{wallet.slice(-4)}
+            </span>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.cyan, background: "rgba(61,139,94,0.12)", border: "1px solid rgba(61,139,94,0.25)", borderRadius: 4, padding: "1px 7px" }}>
+              WALLET CONNECTED
+            </span>
           </div>
 
           {/* Step indicators */}
@@ -2524,9 +2588,7 @@ function AppInner() {
   const [view, setView]                   = useState("home");
   const [selectedToken, setSelectedToken] = useState(null);
   const [showProfileSetup, setShowProfileSetup] = useState(false);
-  const [profile, setProfile]             = useState(() => {
-    try { return JSON.parse(localStorage.getItem("paxpromote_profile")) || null; } catch { return null; }
-  });
+  const [profile, setProfile]             = useState(null);
 
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
@@ -2534,29 +2596,57 @@ function AppInner() {
 
   const wallet = isConnected ? address : null;
   const onConnectClick = () => open();
-  const onDisconnect = () => { disconnect(); };
-
   const openToken = (token) => { setSelectedToken(token); setView("token"); };
 
-  // Show profile setup modal on first connect
+  // ── When wallet connects: load their profile or prompt creation ──
   useEffect(() => {
-    if (isConnected && address && !profile) {
+    if (!isConnected || !address) {
+      // Wallet disconnected — clear profile from state (not from storage)
+      setProfile(null);
+      setShowProfileSetup(false);
+      return;
+    }
+
+    // Look up profile keyed to this specific wallet
+    const key = `paxpromote_profile_${address.toLowerCase()}`;
+    try {
+      const stored = JSON.parse(localStorage.getItem(key));
+      if (stored && stored.username) {
+        // Returning user — log them straight in
+        setProfile(stored);
+        setShowProfileSetup(false);
+      } else {
+        // New wallet — show profile creation after short delay
+        const timer = setTimeout(() => setShowProfileSetup(true), 600);
+        return () => clearTimeout(timer);
+      }
+    } catch {
       const timer = setTimeout(() => setShowProfileSetup(true), 600);
       return () => clearTimeout(timer);
     }
-  }, [isConnected, address, profile]);
+  }, [isConnected, address]);
 
   const handleSaveProfile = (profileData) => {
-    setProfile(profileData);
-    localStorage.setItem("paxpromote_profile", JSON.stringify(profileData));
+    const data = { ...profileData, wallet: address, updatedAt: Date.now() };
+    const key  = `paxpromote_profile_${address.toLowerCase()}`;
+    localStorage.setItem(key, JSON.stringify(data));
+    setProfile(data);
     setShowProfileSetup(false);
   };
 
   const handleSkipProfile = () => {
-    const skipped = { skipped: true, wallet: address };
-    setProfile(skipped);
-    localStorage.setItem("paxpromote_profile", JSON.stringify(skipped));
+    // Save a minimal placeholder so we don't re-prompt on next visit
+    const data = { skipped: true, wallet: address, createdAt: Date.now() };
+    const key  = `paxpromote_profile_${address.toLowerCase()}`;
+    localStorage.setItem(key, JSON.stringify(data));
+    setProfile(data);
     setShowProfileSetup(false);
+  };
+
+  const onDisconnect = () => {
+    disconnect();
+    setProfile(null);
+    setView("home");
   };
 
   return (
