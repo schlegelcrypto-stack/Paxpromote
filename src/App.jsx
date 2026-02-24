@@ -778,7 +778,50 @@ const PROMOTED_TOKENS = [
   { name: "PaxRocket",    ticker: "$PRKX",  change: 18.5, price: "0.00022 PAX", emoji: "🛸", color: "rgba(167,139,250,0.15)", promoted: true },
 ];
 
-// ─── GraphQL token fetcher ────────────────────────────────────────────────────
+// ─── Promoted token registry ─────────────────────────────────────────────────
+// Reads from: 1) real paid campaigns in localStorage, 2) mock promoted list
+// Returns a Set of lowercase contract addresses + a lookup fn
+function usePromotedTokens() {
+  const [promotedAddresses, setPromotedAddresses] = useState(() => buildPromotedSet());
+
+  function buildPromotedSet() {
+    const set = new Set();
+    // Mock promoted (by ticker, lowercased)
+    PROMOTED_TOKENS.forEach(t => set.add(t.ticker?.toLowerCase()));
+    // Real paid campaigns from localStorage
+    try {
+      const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+      campaigns.forEach(c => {
+        if (c.contractAddress) set.add(c.contractAddress.toLowerCase());
+        if (c.token)           set.add(c.token.toLowerCase());
+      });
+    } catch {}
+    return set;
+  }
+
+  // Re-read on focus (so if user paid in another tab it refreshes)
+  useEffect(() => {
+    const refresh = () => setPromotedAddresses(buildPromotedSet());
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, []);
+
+  const isPromoted = (token) => {
+    if (!token) return false;
+    if (token.promoted === true) return true;
+    if (token.address && promotedAddresses.has(token.address.toLowerCase())) return true;
+    if (token.ticker  && promotedAddresses.has(token.ticker.toLowerCase()))  return true;
+    if (token.name    && promotedAddresses.has(token.name.toLowerCase()))    return true;
+    return false;
+  };
+
+  // Also tag tokens in an array
+  const tagTokens = (tokens) => tokens.map(t => ({ ...t, promoted: isPromoted(t) }));
+
+  return { isPromoted, tagTokens };
+}
+
+
 const MARKETS_QUERY = `
   query FetchMarkets($orderBy: String!, $orderDirection: String!, $first: Int!, $skip: Int!) {
     markets(
@@ -1313,51 +1356,51 @@ function PromotePage({ wallet, onConnectClick }) {
   const { sendTransaction, data: txHash } = useSendTransaction();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: txHash,
-    pollingInterval: 2_000, // poll every 2s instead of default 4s
+    pollingInterval: 800,
   });
 
-  // Manual RPC receipt poller — fallback for chains where wagmi polling stalls
+  // Aggressive concurrent receipt poller — doesn't wait for each request to finish
   useEffect(() => {
     if (!txHash || txStatus === "success" || txStatus === "error") return;
 
-    let attempts = 0;
-    const maxAttempts = 60; // 2 min timeout at 2s intervals
+    setTxStatus("confirming");
+    let done = false;
 
-    const poll = async () => {
-      attempts++;
+    const checkReceipt = async () => {
+      if (done) return;
       try {
         const res = await fetch("https://mainnet-beta.rpc.hyperpaxeer.com/rpc", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            jsonrpc: "2.0", id: 1,
+            jsonrpc: "2.0", id: Date.now(),
             method: "eth_getTransactionReceipt",
             params: [txHash],
           }),
         });
         const data = await res.json();
+        if (done) return;
         if (data?.result?.status === "0x1") {
-          // Success confirmed directly from RPC
+          done = true;
           handleConfirmed();
-          return;
-        }
-        if (data?.result?.status === "0x0") {
+        } else if (data?.result?.status === "0x0") {
+          done = true;
           setTxStatus("error");
           setTxError("Transaction failed on-chain");
-          return;
         }
-      } catch { /* network hiccup, keep polling */ }
-
-      if (attempts >= maxAttempts) {
-        // Timed out — tx was sent, just can't confirm. Show success with caveat.
-        handleConfirmed(true);
-        return;
-      }
-      setTimeout(poll, 2000);
+      } catch { /* ignore, next interval will retry */ }
     };
 
-    setTxStatus("confirming");
-    setTimeout(poll, 2000); // start polling after 2s
+    // Fire immediately, then every 500ms — don't wait for response before firing next
+    checkReceipt();
+    const interval = setInterval(checkReceipt, 500);
+
+    // Hard timeout at 3 min — assume success if tx was signed
+    const timeout = setTimeout(() => {
+      if (!done) { done = true; handleConfirmed(true); }
+    }, 180_000);
+
+    return () => { done = true; clearInterval(interval); clearTimeout(timeout); };
   }, [txHash]);
 
   const handleConfirmed = (timedOut = false) => {
@@ -2374,11 +2417,21 @@ function HomeTiersStrip({ setView }) {
 // ─── Token Detail Page ────────────────────────────────────────────────────────
 function TokenDetailPage({ token, onBack, setView, wallet, onConnectClick }) {
   const isMobile = useIsMobile();
+  const { isPromoted } = usePromotedTokens();
+  const [copied, setCopied] = useState(false);
+
   if (!token) return null;
 
-  const isUp = token.change >= 0;
+  const promoted   = isPromoted(token);
+  const isUp       = token.change >= 0;
   const changeColor = isUp ? C.green : C.red;
-  const shortAddr = token.address ? `${token.address.slice(0,6)}...${token.address.slice(-4)}` : "—";
+  const shortAddr  = token.address ? `${token.address.slice(0,6)}...${token.address.slice(-4)}` : "—";
+
+  const handleCopy = () => {
+    navigator.clipboard?.writeText(token.address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   const raidOptions = [
     {
@@ -2422,77 +2475,62 @@ function TokenDetailPage({ token, onBack, setView, wallet, onConnectClick }) {
     <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 60 }}>
       <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "1.5rem 1rem" : "2rem 2rem" }}>
 
-        {/* Back link */}
+        {/* Back */}
         <button onClick={onBack} style={{
           background: "none", border: "none", cursor: "pointer",
           display: "flex", alignItems: "center", gap: 8,
           color: C.text2, fontFamily: "'DM Sans', sans-serif", fontSize: "0.875rem",
           marginBottom: "1.5rem", padding: 0,
-        }}>
-          <span>←</span> Back to Markets
-        </button>
+        }}>← Back to Markets</button>
 
-        {/* ── RAID BAR ── */}
-        <div style={{
-          background: "#111113",
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: isMobile ? "1rem" : "1.25rem 1.5rem",
-          marginBottom: "1.25rem",
-        }}>
+        {/* ── PROMOTED BANNER (only when promoted) ── */}
+        {promoted && (
           <div style={{
-            fontFamily: "'DM Mono', monospace", fontSize: "0.65rem",
-            letterSpacing: "0.08em", color: C.cyan, textTransform: "uppercase",
-            marginBottom: "1rem",
-          }}>⚡ Raid Options</div>
-
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
-            gap: 12,
+            background: "linear-gradient(135deg, rgba(61,139,94,0.18) 0%, rgba(61,139,94,0.06) 100%)",
+            border: `1px solid rgba(61,139,94,0.45)`,
+            borderRadius: 16,
+            padding: isMobile ? "1rem 1.25rem" : "1.25rem 1.75rem",
+            marginBottom: "1.25rem",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            flexWrap: "wrap", gap: 12,
+            boxShadow: "0 0 30px rgba(61,139,94,0.12)",
           }}>
-            {raidOptions.map(opt => (
-              <div key={opt.id} style={{
-                background: "#1a1a1e",
-                border: `1px solid ${C.border}`,
-                borderRadius: 12,
-                padding: "1rem",
-                display: "flex", flexDirection: "column", gap: 10,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 8,
-                    background: "rgba(61,139,94,0.10)",
-                    border: `1px solid rgba(61,139,94,0.2)`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: C.cyan, flexShrink: 0,
-                  }}>
-                    {opt.icon}
-                  </div>
-                  <div>
-                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.9rem", color: C.text }}>{opt.label}</div>
-                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.text3, marginTop: 2 }}>{opt.desc}</div>
-                  </div>
-                </div>
-                <button onClick={opt.action} style={{
-                  ...btnPrimary,
-                  padding: "0.5rem 1rem", fontSize: "0.8rem", width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                }}>
-                  Raid
-                </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              {/* Pulse dot */}
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: C.green, boxShadow: `0 0 10px ${C.green}` }} />
+                <div style={{
+                  position: "absolute", inset: -4, borderRadius: "50%",
+                  border: `1px solid ${C.green}`, opacity: 0.4,
+                  animation: "pulse 2s ease-in-out infinite",
+                }} />
               </div>
-            ))}
+              <div>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: isMobile ? "1rem" : "1.15rem", color: C.text, letterSpacing: "-0.02em" }}>
+                  🚀 This token has been promoted
+                </div>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.text2, marginTop: 3 }}>
+                  Active raid campaign running — raiders are amplifying this token right now
+                </div>
+              </div>
+            </div>
+            <button onClick={() => {
+              // Scroll to raid section
+              document.getElementById("raid-section")?.scrollIntoView({ behavior: "smooth" });
+            }} style={{ ...btnPrimary, padding: "0.6rem 1.5rem", fontSize: "0.875rem", whiteSpace: "nowrap" }}>
+              ⚡ Raid Now
+            </button>
           </div>
-        </div>
+        )}
 
-        {/* ── TOKEN HEADER (PaxFun style) ── */}
+        {/* ── TOKEN HEADER ── */}
         <div style={{
           background: "#111113",
-          border: `1px solid ${C.border}`,
+          border: `1px solid ${promoted ? "rgba(61,139,94,0.35)" : C.border}`,
           borderRadius: 16,
           padding: isMobile ? "1.25rem" : "1.5rem",
           marginBottom: "1.25rem",
+          boxShadow: promoted ? "0 0 20px rgba(61,139,94,0.08)" : "none",
         }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
             {/* Avatar */}
@@ -2513,7 +2551,7 @@ function TokenDetailPage({ token, onBack, setView, wallet, onConnectClick }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
                 <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "1.4rem", color: C.text }}>{token.name}</span>
                 <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.9rem", color: C.text3 }}>{token.ticker}</span>
-                {token.promoted && (
+                {promoted && (
                   <span style={{
                     fontFamily: "'DM Mono', monospace", fontSize: "0.6rem", letterSpacing: "0.06em",
                     background: "rgba(61,139,94,0.15)", color: C.cyan,
@@ -2524,9 +2562,11 @@ function TokenDetailPage({ token, onBack, setView, wallet, onConnectClick }) {
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.72rem", color: C.text3 }}>Token: {shortAddr}</span>
                 {token.address && (
-                  <button onClick={() => navigator.clipboard?.writeText(token.address)} style={{
-                    background: "none", border: "none", cursor: "pointer", color: C.text3, fontSize: "0.75rem", padding: 0,
-                  }}>⧉</button>
+                  <button onClick={handleCopy} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    color: copied ? C.cyan : C.text3, fontSize: "0.75rem", padding: 0,
+                    transition: "color 0.2s",
+                  }}>{copied ? "✓" : "⧉"}</button>
                 )}
               </div>
             </div>
@@ -2537,9 +2577,7 @@ function TokenDetailPage({ token, onBack, setView, wallet, onConnectClick }) {
               borderRadius: 8, padding: "8px 12px",
               fontFamily: "'DM Sans', sans-serif", fontSize: "0.78rem", color: C.text2,
               textDecoration: "none", display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
-            }}>
-              View on PaxFun ↗
-            </a>
+            }}>View on PaxFun ↗</a>
           </div>
 
           {/* Stats bar */}
@@ -2550,16 +2588,16 @@ function TokenDetailPage({ token, onBack, setView, wallet, onConnectClick }) {
             borderTop: `1px solid ${C.border}`, paddingTop: "1.25rem",
           }}>
             {[
-              ["Price",       token.price   || "—"],
-              ["Market Cap",  token.mcap    || "—"],
-              ["24h Volume",  token.volume  || "—"],
-              ["Holders",     token.holders || "—"],
-              ["Swaps",       token.swaps   || "—"],
+              ["Price",      token.price   || "—"],
+              ["Market Cap", token.mcap    || "—"],
+              ["24h Volume", token.volume  || "—"],
+              ["Holders",    token.holders || "—"],
+              ["Swaps",      token.swaps   || "—"],
             ].map(([label, val]) => (
               <div key={label}>
                 <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.text3, marginBottom: 4 }}>{label}</div>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, fontSize: label === "Price" ? "1.3rem" : "1rem", color: C.text }}>{val}</div>
-                {label === "Price" && (
+                {label === "Price" && token.change != null && (
                   <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.78rem", color: changeColor, marginTop: 2 }}>
                     {isUp ? "+" : ""}{token.change?.toFixed(2)}%
                   </div>
@@ -2569,8 +2607,56 @@ function TokenDetailPage({ token, onBack, setView, wallet, onConnectClick }) {
           </div>
         </div>
 
-        {/* ── PROMOTE CTA ── */}
-        {!token.promoted && (
+        {/* ── RAID SECTION (only when promoted) ── */}
+        {promoted ? (
+          <div id="raid-section" style={{
+            background: "#111113",
+            border: `1px solid rgba(61,139,94,0.3)`,
+            borderRadius: 16,
+            padding: isMobile ? "1rem" : "1.25rem 1.5rem",
+            marginBottom: "1.25rem",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: "1rem" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.65rem", letterSpacing: "0.08em", color: C.cyan, textTransform: "uppercase" }}>⚡ Active Raid Options</div>
+              <div style={{ flex: 1, height: 1, background: `rgba(61,139,94,0.2)` }} />
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.text3 }}>Campaign live</div>
+            </div>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
+              gap: 12,
+            }}>
+              {raidOptions.map(opt => (
+                <div key={opt.id} style={{
+                  background: "#1a1a1e",
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 12, padding: "1rem",
+                  display: "flex", flexDirection: "column", gap: 10,
+                  transition: "border-color 0.15s",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 8,
+                      background: "rgba(61,139,94,0.10)",
+                      border: `1px solid rgba(61,139,94,0.2)`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: C.cyan, flexShrink: 0,
+                    }}>{opt.icon}</div>
+                    <div>
+                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.9rem", color: C.text }}>{opt.label}</div>
+                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.text3, marginTop: 2 }}>{opt.desc}</div>
+                    </div>
+                  </div>
+                  <button onClick={opt.action} style={{
+                    ...btnPrimary, padding: "0.5rem 1rem", fontSize: "0.8rem", width: "100%",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  }}>⚡ Raid</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* ── PROMOTE CTA (only when NOT promoted) ── */
           <div style={{
             background: "rgba(61,139,94,0.06)",
             border: `1px solid rgba(61,139,94,0.2)`,
