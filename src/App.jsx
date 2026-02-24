@@ -1098,6 +1098,7 @@ function PromotedSection({ onTokenClick, setView }) {
 }
 
 
+function TokenSections({ setView, onTokenClick }) {
   const newTokens    = useMarkets("createdAt",  "desc");
   const hotTokens    = useMarkets("volumeUSID", "desc");
   const gainerTokens = useMarkets("marketCap",  "desc");
