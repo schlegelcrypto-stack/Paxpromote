@@ -7,6 +7,10 @@
     {
       "source": "/sidiora-api/:path*",
       "destination": "https://us-east-1.ag-v2api.sidiora.xyz/:path*"
+    },
+    {
+      "source": "/pricefeed/:path*",
+      "destination": "https://swap.sidiora.exchange/pricefeed/:path*"
     }
   ]
 }

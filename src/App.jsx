@@ -454,7 +454,17 @@ function Hero({ setView, onConnectClick }) {
         const price = data?.price ?? data?.usd ?? data?.value ?? data?.data?.price ?? null;
         if (price != null) setPaxPrice(parseFloat(price).toFixed(4));
       })
-      .catch(() => {});
+      .catch(() => {
+        // fallback: try pricefeed for PAX native price
+        fetch("/pricefeed/tokens")
+          .then(r => r.json())
+          .then(data => {
+            const list = Array.isArray(data) ? data : [];
+            const pax = list.find(t => t.symbol?.toUpperCase() === "PAX" || t.symbol?.toUpperCase() === "WPAX");
+            if (pax?.price_usd) setPaxPrice(parseFloat(pax.price_usd).toFixed(4));
+          })
+          .catch(() => {});
+      });
   }, []);
 
   return (
@@ -700,7 +710,7 @@ const PROMOTED_TOKENS = [
   { name: "PaxRocket",    ticker: "$PRKX",  change: 18.5, price: "0.00022 PAX", emoji: "🛸", color: "rgba(167,139,250,0.15)", promoted: true },
 ];
 
-// ─── Token Sections (fetches from Paxeer Launchpad API) ───────────────────────
+// ─── Token Sections (fetches from Sidiora pricefeed) ─────────────────────────
 function useTokens(endpoint) {
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -709,41 +719,40 @@ function useTokens(endpoint) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(endpoint, { headers: { "Accept": "application/json" } })
+    fetch(endpoint, { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then(data => {
-        const list = Array.isArray(data) ? data : data.markets || data.data || data.tokens || data.result || [];
-        const normalised = list.slice(0, 24).map(t => ({
+        const list = Array.isArray(data) ? data : data.data || data.tokens || data.markets || [];
+        const normalised = list.slice(0, 40).map(t => ({
           name:    t.name    || "Unknown",
-          ticker:  t.symbol  || "???",
-          price:   t.price != null ? `${parseFloat(t.price).toFixed(6)} PAX` : "—",
+          ticker:  t.symbol  ? `$${t.symbol}` : "???",
+          price:   t.price_usd != null ? `$${parseFloat(t.price_usd).toFixed(8)}` : "—",
           change:  parseFloat(t.price_change_24h ?? 0),
-          image:   t.logo_url || null,
+          volume:  t.volume_24h_usd ? `$${(parseFloat(t.volume_24h_usd)/1000).toFixed(1)}K` : null,
+          mcap:    t.market_cap_usd ? `$${(parseFloat(t.market_cap_usd)/1000).toFixed(1)}K` : null,
+          image:   t.logo_url || t.image || null,
           address: t.address || t.id,
+          verified: t.verified || false,
           emoji:   "🪙",
           color:   "rgba(61,139,94,0.12)",
         }));
         setTokens(normalised);
         setLoading(false);
       })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
+      .catch(err => { setError(err.message); setLoading(false); });
   }, [endpoint]);
 
   return { tokens, loading, error };
 }
 
 function TokenSections({ setView }) {
-  const BASE           = "/paxeer-api";
-  const PAXEER_NEW     = `${BASE}/api/v1/markets/new?limit=20`;
-  const PAXEER_HOT     = `${BASE}/api/v1/markets/hot?limit=20`;
-  const PAXEER_GAINERS = `${BASE}/api/v1/markets/gainers?limit=20`;
+  // All tokens from pricefeed — we sort client-side for each row
+  const { tokens: allTokens, loading, error } = useTokens("/pricefeed/tokens");
 
-  const newTokens     = useTokens(PAXEER_NEW);
-  const hotTokens     = useTokens(PAXEER_HOT);
-  const gainerTokens  = useTokens(PAXEER_GAINERS);
+  // Sort variants
+  const newTokens    = { tokens: [...allTokens].slice(0, 20), loading, error };
+  const hotTokens    = { tokens: [...allTokens].sort((a, b) => (parseFloat(b.volume?.replace(/[$K]/g,"") || 0)) - (parseFloat(a.volume?.replace(/[$K]/g,"") || 0))).slice(0, 20), loading, error };
+  const gainerTokens = { tokens: [...allTokens].filter(t => t.change > 0).sort((a, b) => b.change - a.change).slice(0, 20), loading, error };
 
   const handlePromote = () => setView("promote");
 
