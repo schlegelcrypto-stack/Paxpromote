@@ -199,7 +199,21 @@ function Navbar({ view, setView, wallet, profile, onConnectClick, onDisconnect }
         {/* Nav links */}
         <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
 
-          {/* Dashboard dropdown — first */}
+          {/* Other nav items first */}
+          {[["home", "HOME"], ["tiers", "TIERS"], ["promote", "PROMOTE"], ["leaderboard", "LEADERBOARD"]].map(([v, label]) => (
+            <button key={v} onClick={() => setView(v)} style={{
+              background: "transparent",
+              border: "1px solid transparent",
+              color: view === v ? C.cyan : C.text2,
+              padding: "0.4rem 1rem",
+              fontFamily: "'Inter', sans-serif",
+              fontWeight: 600, letterSpacing: "0.08em", fontSize: "0.75rem",
+              cursor: "pointer", borderRadius: 4,
+              transition: "all 0.2s",
+            }}>{label}</button>
+          ))}
+
+          {/* Dashboard dropdown — last, rendered after other items */}
           <div ref={dashRef} style={{ position: "relative" }}>
             <button
               onClick={() => setDashOpen(o => !o)}
@@ -260,20 +274,7 @@ function Navbar({ view, setView, wallet, profile, onConnectClick, onDisconnect }
             )}
           </div>
 
-          {/* Other nav items */}
-          {[["home", "HOME"], ["tiers", "TIERS"], ["leaderboard", "LEADERBOARD"], ["promote", "PROMOTE"]].map(([v, label]) => (
-            <button key={v} onClick={() => setView(v)} style={{
-              background: "transparent",
-              border: "1px solid transparent",
-              color: view === v ? C.cyan : C.text2,
-              padding: "0.4rem 1rem",
-              fontFamily: "'Inter', sans-serif",
-              fontWeight: 600, letterSpacing: "0.08em", fontSize: "0.75rem",
-              cursor: "pointer", borderRadius: 4,
-              transition: "all 0.2s",
-            }}>{label}</button>
-          ))}
-        </div>
+          </div>
 
         {wallet ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
