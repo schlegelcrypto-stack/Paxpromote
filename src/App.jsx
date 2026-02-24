@@ -676,16 +676,14 @@ function useTokens(endpoint) {
 }
 
 function TokenSections({ setView }) {
-  const BASE           = "https://v1api.paxlaunch.paxswap.org";
+  const BASE           = "/paxeer-api";
   const PAXEER_NEW     = `${BASE}/api/v1/markets/new?limit=20`;
   const PAXEER_HOT     = `${BASE}/api/v1/markets/hot?limit=20`;
   const PAXEER_GAINERS = `${BASE}/api/v1/markets/gainers?limit=20`;
-  const PAXEER_LOSERS  = `${BASE}/api/v1/markets/losers?limit=20`;
 
   const newTokens     = useTokens(PAXEER_NEW);
   const hotTokens     = useTokens(PAXEER_HOT);
   const gainerTokens  = useTokens(PAXEER_GAINERS);
-  const loserTokens   = useTokens(PAXEER_LOSERS);
 
   const handlePromote = () => setView("promote");
 
@@ -742,17 +740,6 @@ function TokenSections({ setView }) {
           tokens={gainerTokens.tokens}
           loading={gainerTokens.loading}
           error={gainerTokens.error}
-          onPromote={handlePromote}
-        />
-
-        {/* Top Losers */}
-        <TokenRow
-          title="📉 Top Losers"
-          badge="24H LOSERS"
-          badgeColor="#f87171"
-          tokens={loserTokens.tokens}
-          loading={loserTokens.loading}
-          error={loserTokens.error}
           onPromote={handlePromote}
         />
 
@@ -2143,7 +2130,7 @@ function AppInner() {
         <>
           <Hero setView={setView} onConnectClick={onConnectClick} />
           <TokenSections setView={setView} />
-          <HomeTiersStrip setView={setView} />
+          <TiersPage setView={setView} />
           <Footer />
         </>
       )}

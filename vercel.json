@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/paxeer-api/:path*",
+      "destination": "https://v1api.paxlaunch.paxswap.org/:path*"
+    }
+  ]
+}
