@@ -457,18 +457,31 @@ function Hero({ setView, onConnectClick }) {
   const [liveStats, setLiveStats] = useState({ tokensPromoted: 0, totalPaxDeployed: 0, activeCampaigns: 0, totalUsers: 0 });
 
   useEffect(() => {
+    const getLocalStats = () => {
+      try {
+        const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+        const uniqueTokens = new Set(campaigns.map(c => (c.contractAddress || c.token || "").toLowerCase()).filter(Boolean));
+        const totalPax = campaigns.reduce((sum, c) => sum + parseFloat((c.paxAmount || "0").replace(/,/g, "")), 0);
+        return { tokensPromoted: uniqueTokens.size, totalPaxDeployed: totalPax, activeCampaigns: campaigns.filter(c => c.status === "active").length, totalUsers: 0 };
+      } catch { return null; }
+    };
+
     const load = () =>
       fetch("/api/campaigns/stats")
         .then(r => r.json())
-        .then(data => { if (data?.tokensPromoted != null) setLiveStats(data); })
+        .then(data => {
+          if (data?.tokensPromoted != null) {
+            // If API returns zeros but localStorage has data, use localStorage until migration runs
+            if (data.tokensPromoted === 0) {
+              const local = getLocalStats();
+              if (local && local.tokensPromoted > 0) { setLiveStats({ ...data, ...local }); return; }
+            }
+            setLiveStats(data);
+          }
+        })
         .catch(() => {
-          // Fallback to localStorage if API not yet deployed
-          try {
-            const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
-            const uniqueTokens = new Set(campaigns.map(c => (c.contractAddress || c.token || "").toLowerCase()).filter(Boolean));
-            const totalPax = campaigns.reduce((sum, c) => sum + parseFloat((c.paxAmount || "0").replace(/,/g, "")), 0);
-            setLiveStats({ tokensPromoted: uniqueTokens.size, totalPaxDeployed: totalPax, activeCampaigns: campaigns.filter(c => c.status === "active").length });
-          } catch {}
+          const local = getLocalStats();
+          if (local) setLiveStats(prev => ({ ...prev, ...local }));
         });
     load();
     const interval = setInterval(load, 30_000);
@@ -512,8 +525,8 @@ function Hero({ setView, onConnectClick }) {
 
   return (
     <section style={{
-      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      position: "relative", overflow: "hidden", paddingTop: 64,
+      minHeight: "calc(100vh - 80px)", display: "flex", alignItems: "center", justifyContent: "center",
+      position: "relative", overflow: "hidden", paddingTop: 64, paddingBottom: "3rem",
     }}>
       <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 55% at 50% -5%, rgba(61,139,94,0.08) 0%, transparent 70%)", pointerEvents: "none" }} />
       <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 50% 40% at 75% 70%, rgba(61,139,94,0.03) 0%, transparent 60%)", pointerEvents: "none" }} />
@@ -1004,7 +1017,7 @@ function PromotedSection({ onTokenClick, setView }) {
   if (promotedTokens.length === 0 && allTokens.loading) return null;
 
   return (
-    <div style={{ background: "#0a0a0b", paddingTop: "4rem", paddingBottom: "0" }}>
+    <div style={{ background: "#0a0a0b", paddingTop: "2rem", paddingBottom: "0" }}>
       <div style={{ maxWidth: 1600, margin: "0 auto" }}>
 
         {/* Header */}
