@@ -392,10 +392,22 @@ function Navbar({ view, setView, wallet, profile, onConnectClick, onDisconnect }
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 function Hero({ setView, onConnectClick }) {
   const [count, setCount] = useState(0);
+  const [paxPrice, setPaxPrice] = useState(null);
   const isMobile = useIsMobile();
+
   useEffect(() => {
     const timer = setInterval(() => setCount(c => c < 12847 ? c + Math.floor(Math.random() * 150) : 12847), 30);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    fetch("/sidiora-api/api/native/price")
+      .then(r => r.json())
+      .then(data => {
+        const price = data?.price ?? data?.usd ?? data?.value ?? data?.data?.price ?? null;
+        if (price != null) setPaxPrice(parseFloat(price).toFixed(4));
+      })
+      .catch(() => {});
   }, []);
 
   return (
@@ -466,7 +478,7 @@ function Hero({ setView, onConnectClick }) {
           maxWidth: isMobile ? 340 : "none",
           margin: `${isMobile ? "3rem" : "5rem"} auto 0`,
         }}>
-          {[["2,847","Active Raiders"],["$4.2M","PAX Distributed"],["847","Tokens Promoted"],["98.3%","Campaign Success"]].map(([num, label]) => (
+          {[["2,847","Active Raiders"],["$4.2M","PAX Distributed"],["847","Tokens Promoted"],[paxPrice ? `$${paxPrice}` : "—","PAX Price"]].map(([num, label]) => (
             <div key={label} style={{ textAlign: "center" }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: isMobile ? "1.4rem" : "2rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{num}</div>
               <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.65rem", letterSpacing: "0.05em", color: C.text3, marginTop: 4, textTransform: "uppercase" }}>{label}</div>

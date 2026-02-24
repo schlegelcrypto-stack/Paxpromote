@@ -3,6 +3,10 @@
     {
       "source": "/paxeer-api/:path*",
       "destination": "https://v1api.paxlaunch.paxswap.org/:path*"
+    },
+    {
+      "source": "/sidiora-api/:path*",
+      "destination": "https://us-east-1.ag-v2api.sidiora.xyz/:path*"
     }
   ]
 }
