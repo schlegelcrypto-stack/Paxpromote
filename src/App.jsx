@@ -674,6 +674,7 @@ function TokenCard({ token, onPromote, onTokenClick }) {
 
   return (
     <div
+      onClick={() => onTokenClick && onTokenClick(token)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
