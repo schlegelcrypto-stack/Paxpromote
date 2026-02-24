@@ -475,76 +475,31 @@ function Hero({ setView, onConnectClick }) {
     return () => clearInterval(interval);
   }, []);
 
-  // PAX price — try GraphQL spotPrice for a known PAX pair, then fallbacks
+  // PAX price from Paxscan stats API
   useEffect(() => {
-    const tryGraphQL = async () => {
+    const fetchPrice = async () => {
       try {
-        const res = await fetch("/hg/graphql", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query: `{ markets(first: 50, orderBy: volumeUSID, orderDirection: desc) { name symbol spotPrice } }`,
-          }),
-        });
-        const json = await res.json();
-        const markets = json?.data?.markets || [];
-        // Find a PAX-paired market with a real spotPrice
-        const paxMarket = markets.find(m =>
-          m.symbol?.toUpperCase() === "WPAX" ||
-          m.symbol?.toUpperCase() === "PAX" ||
-          m.name?.toUpperCase().includes("WPAX")
-        );
-        if (paxMarket?.spotPrice && parseFloat(paxMarket.spotPrice) > 0) {
-          setPaxPrice(parseFloat(paxMarket.spotPrice).toFixed(6));
-          return true;
-        }
-        // Otherwise grab the first valid spotPrice as a reference
-        const anyMarket = markets.find(m => parseFloat(m.spotPrice) > 0);
-        if (anyMarket) {
-          setPaxPrice(parseFloat(anyMarket.spotPrice).toFixed(6));
-          return true;
+        const res  = await fetch("https://paxscan.paxeer.app/api/v2/stats");
+        const data = await res.json();
+        if (data?.coin_price && parseFloat(data.coin_price) > 0) {
+          setPaxPrice(parseFloat(data.coin_price).toFixed(2));
+          return;
         }
       } catch {}
-      return false;
-    };
 
-    const tryNativeAPI = async () => {
+      // Fallbacks if paxscan is unreachable
       try {
-        const res = await fetch("/sidiora-api/api/native/price");
+        const res  = await fetch("/sidiora-api/api/native/price");
         const data = await res.json();
         const price = data?.price ?? data?.usd ?? data?.value ?? data?.data?.price ?? null;
         if (price != null && parseFloat(price) > 0) {
-          setPaxPrice(parseFloat(price).toFixed(6));
-          return true;
+          setPaxPrice(parseFloat(price).toFixed(2));
         }
       } catch {}
-      return false;
     };
 
-    const tryPriceFeed = async () => {
-      try {
-        const res = await fetch("/pricefeed/tokens");
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : [];
-        const pax = list.find(t => t.symbol?.toUpperCase() === "PAX" || t.symbol?.toUpperCase() === "WPAX");
-        if (pax?.price_usd && parseFloat(pax.price_usd) > 0) {
-          setPaxPrice(parseFloat(pax.price_usd).toFixed(6));
-          return true;
-        }
-      } catch {}
-      return false;
-    };
-
-    // Try all sources in parallel, first to succeed wins
-    (async () => {
-      const results = await Promise.allSettled([tryGraphQL(), tryNativeAPI(), tryPriceFeed()]);
-      // Already set via setPaxPrice in whichever resolved first
-    })();
-
-    // Refresh every 30s
-    const interval = setInterval(async () => {
-      await tryNativeAPI() || await tryGraphQL() || await tryPriceFeed();
-    }, 30_000);
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 30_000);
     return () => clearInterval(interval);
   }, []);
 
@@ -707,14 +662,6 @@ function TokenCard({ token, onPromote, onTokenClick }) {
               color: changeColor, background: changeBg,
               padding: "1px 7px", borderRadius: 20,
             }}>{isUp ? "+" : ""}{token.change?.toFixed(2)}%</span>
-            {isPromoted && (
-              <span style={{
-                fontFamily: "'DM Mono', monospace", fontSize: "0.56rem", letterSpacing: "0.06em",
-                color: C.cyan, background: "rgba(61,139,94,0.15)",
-                border: "1px solid rgba(61,139,94,0.3)",
-                borderRadius: 4, padding: "1px 5px", whiteSpace: "nowrap",
-              }}>⚡ PROMOTED</span>
-            )}
           </div>
         </div>
       </div>
@@ -750,7 +697,14 @@ function TokenCard({ token, onPromote, onTokenClick }) {
         >
           <span style={{ fontSize: "0.65rem" }}>⚡</span> Active Promotions
         </button>
-        {!isPromoted && (
+        {isPromoted ? (
+          <span style={{
+            fontFamily: "'DM Mono', monospace", fontSize: "0.58rem", letterSpacing: "0.06em",
+            color: C.cyan, background: "rgba(61,139,94,0.15)",
+            border: "1px solid rgba(61,139,94,0.3)",
+            borderRadius: 4, padding: "2px 7px",
+          }}>⚡ PROMOTED</span>
+        ) : (
           <button
             onClick={e => { e.stopPropagation(); onPromote(token); }}
             style={{
@@ -1119,18 +1073,6 @@ function TokenSections({ setView, onTokenClick }) {
           </h2>
         </div>
 
-        {/* New Tokens */}
-        <TokenRow
-          title="✨ New Tokens"
-          badge="JUST LAUNCHED"
-          badgeColor={C.green}
-          tokens={tagTokens(newTokens.tokens)}
-          loading={newTokens.loading}
-          error={newTokens.error}
-          onPromote={handlePromote}
-          onTokenClick={onTokenClick}
-        />
-
         {/* Hot Tokens */}
         <TokenRow
           title="🌶️ Hot Right Now"
@@ -1151,6 +1093,18 @@ function TokenSections({ setView, onTokenClick }) {
           tokens={tagTokens(gainerTokens.tokens)}
           loading={gainerTokens.loading}
           error={gainerTokens.error}
+          onPromote={handlePromote}
+          onTokenClick={onTokenClick}
+        />
+
+        {/* New Tokens */}
+        <TokenRow
+          title="✨ New Tokens"
+          badge="JUST LAUNCHED"
+          badgeColor={C.green}
+          tokens={tagTokens(newTokens.tokens)}
+          loading={newTokens.loading}
+          error={newTokens.error}
           onPromote={handlePromote}
           onTokenClick={onTokenClick}
         />
