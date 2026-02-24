@@ -571,11 +571,12 @@ function TokenAvatar({ token, size = 48 }) {
   );
 }
 
-function TokenCard({ token, onPromote }) {
+function TokenCard({ token, onPromote, onTokenClick }) {
   const [hovered, setHovered] = useState(false);
-  const isUp = token.change >= 0;
+  const isUp       = token.change >= 0;
   const changeColor = isUp ? C.green : C.red;
   const changeBg    = isUp ? "rgba(74,222,128,0.12)" : "rgba(239,68,68,0.12)";
+  const isPromoted  = token.promoted === true;
 
   return (
     <div
@@ -583,12 +584,17 @@ function TokenCard({ token, onPromote }) {
       onMouseLeave={() => setHovered(false)}
       style={{
         minWidth: 260, maxWidth: 260,
-        background: hovered ? "rgba(255,255,255,0.03)" : "#111113",
-        border: `1px solid ${hovered ? "rgba(255,255,255,0.12)" : C.border}`,
+        background: isPromoted
+          ? "rgba(61,139,94,0.08)"
+          : hovered ? "rgba(255,255,255,0.03)" : "#111113",
+        border: `1px solid ${isPromoted
+          ? "rgba(61,139,94,0.45)"
+          : hovered ? "rgba(255,255,255,0.12)" : C.border}`,
         borderRadius: 14, padding: "16px",
         cursor: "pointer", flexShrink: 0,
         transition: "border-color 0.15s, background 0.15s",
         display: "flex", flexDirection: "column", gap: 12,
+        boxShadow: isPromoted ? "0 0 16px rgba(61,139,94,0.10)" : "none",
       }}>
 
       {/* Top row: avatar + name/ticker/price/change */}
@@ -598,6 +604,14 @@ function TokenCard({ token, onPromote }) {
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
             <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.95rem", color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{token.name}</span>
             <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.text3, whiteSpace: "nowrap" }}>{token.ticker}</span>
+            {isPromoted && (
+              <span style={{
+                fontFamily: "'DM Mono', monospace", fontSize: "0.58rem", letterSpacing: "0.06em",
+                color: C.cyan, background: "rgba(61,139,94,0.15)",
+                border: "1px solid rgba(61,139,94,0.3)",
+                borderRadius: 4, padding: "1px 5px",
+              }}>PROMOTED</span>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, fontSize: "1rem", color: C.text }}>{token.price || "—"}</span>
@@ -611,17 +625,15 @@ function TokenCard({ token, onPromote }) {
       </div>
 
       {/* Stats row */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
-        gap: 6,
-      }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
         {[
-          ["Market Cap", token.mcap || "—"],
-          ["Volume 24h", token.volume || "—"],
+          ["Market Cap", token.mcap    || "—"],
+          ["Volume 24h", token.volume  || "—"],
           ["Holders",    token.holders || "—"],
         ].map(([label, val]) => (
           <div key={label} style={{
-            background: "#1a1a1e", borderRadius: 8, padding: "8px 10px",
+            background: isPromoted ? "rgba(61,139,94,0.06)" : "#1a1a1e",
+            borderRadius: 8, padding: "8px 10px",
           }}>
             <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.65rem", color: C.text3, marginBottom: 3 }}>{label}</div>
             <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.8rem", color: C.text }}>{val}</div>
@@ -629,37 +641,37 @@ function TokenCard({ token, onPromote }) {
         ))}
       </div>
 
-      {/* Footer: active promotions link + promote button */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-        <a
-          href={`https://paxpromote.io/?token=${token.address}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={e => e.stopPropagation()}
+      {/* Footer */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${isPromoted ? "rgba(61,139,94,0.2)" : C.border}`, paddingTop: 10 }}>
+        <button
+          onClick={e => { e.stopPropagation(); onTokenClick && onTokenClick(token); }}
           style={{
+            background: "none", border: "none", cursor: "pointer", padding: 0,
             fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem",
-            color: C.cyan, textDecoration: "none", display: "flex", alignItems: "center", gap: 4,
+            color: C.cyan, display: "flex", alignItems: "center", gap: 4,
           }}
           onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
           onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}
         >
           <span style={{ fontSize: "0.65rem" }}>⚡</span> Active Promotions
-        </a>
-        <button
-          onClick={e => { e.stopPropagation(); onPromote(token); }}
-          style={{
-            ...btnPrimary, padding: "5px 12px", fontSize: "0.72rem",
-            opacity: hovered ? 1 : 0.7, transition: "opacity 0.15s",
-          }}>
-          Promote
         </button>
+        {!isPromoted && (
+          <button
+            onClick={e => { e.stopPropagation(); onPromote(token); }}
+            style={{
+              ...btnPrimary, padding: "5px 12px", fontSize: "0.72rem",
+              opacity: hovered ? 1 : 0.7, transition: "opacity 0.15s",
+            }}>
+            Promote
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
 // ─── Token Row (Netflix-style) ────────────────────────────────────────────────
-function TokenRow({ title, badge, badgeColor, tokens, loading, error, onPromote }) {
+function TokenRow({ title, badge, badgeColor, tokens, loading, error, onPromote, onTokenClick }) {
   const rowRef = useRef(null);
 
   const scroll = (dir) => {
@@ -731,7 +743,7 @@ function TokenRow({ title, badge, badgeColor, tokens, loading, error, onPromote 
           )}
 
           {!loading && !error && tokens.map((token, i) => (
-            <TokenCard key={token.address || i} token={token} onPromote={onPromote} />
+            <TokenCard key={token.address || i} token={token} onPromote={onPromote} onTokenClick={onTokenClick} />
           ))}
         </div>
       </div>
@@ -835,7 +847,7 @@ function useMarkets(orderBy, orderDirection) {
   return { tokens, loading, error };
 }
 
-function TokenSections({ setView }) {
+function TokenSections({ setView, onTokenClick }) {
   const newTokens    = useMarkets("createdAt",  "desc");
   const hotTokens    = useMarkets("volumeUSID", "desc");
   const gainerTokens = useMarkets("marketCap",  "desc");
@@ -854,17 +866,6 @@ function TokenSections({ setView }) {
           </h2>
         </div>
 
-        {/* Promoted */}
-        <TokenRow
-          title="🔥 Promoted Tokens"
-          badge="SPONSORED"
-          badgeColor={C.cyan}
-          tokens={PROMOTED_TOKENS}
-          loading={false}
-          error={null}
-          onPromote={handlePromote}
-        />
-
         {/* New Tokens */}
         <TokenRow
           title="✨ New Tokens"
@@ -874,6 +875,7 @@ function TokenSections({ setView }) {
           loading={newTokens.loading}
           error={newTokens.error}
           onPromote={handlePromote}
+          onTokenClick={onTokenClick}
         />
 
         {/* Hot Tokens */}
@@ -885,17 +887,19 @@ function TokenSections({ setView }) {
           loading={hotTokens.loading}
           error={hotTokens.error}
           onPromote={handlePromote}
+          onTokenClick={onTokenClick}
         />
 
         {/* Top Gainers */}
         <TokenRow
-          title="📈 Top Gainers"
-          badge="24H GAINERS"
+          title="📈 Top by Market Cap"
+          badge="MARKET CAP"
           badgeColor={C.green}
           tokens={gainerTokens.tokens}
           loading={gainerTokens.loading}
           error={gainerTokens.error}
           onPromote={handlePromote}
+          onTokenClick={onTokenClick}
         />
 
       </div>
@@ -2170,6 +2174,232 @@ function HomeTiersStrip({ setView }) {
 }
 
 // ─── Footer ───────────────────────────────────────────────────────────────────
+// ─── Token Detail Page ────────────────────────────────────────────────────────
+function TokenDetailPage({ token, onBack, setView, wallet, onConnectClick }) {
+  const isMobile = useIsMobile();
+  if (!token) return null;
+
+  const isUp = token.change >= 0;
+  const changeColor = isUp ? C.green : C.red;
+  const shortAddr = token.address ? `${token.address.slice(0,6)}...${token.address.slice(-4)}` : "—";
+
+  const raidOptions = [
+    {
+      id: "x",
+      label: "Interact on X",
+      desc: "Like, retweet & reply to boost visibility",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 20, height: 20 }}>
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+        </svg>
+      ),
+      action: () => window.open(`https://x.com/search?q=%24${token.ticker?.replace("$","")}`, "_blank"),
+    },
+    {
+      id: "media",
+      label: "Create Media",
+      desc: "Make memes, videos & posts for this token",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 20, height: 20 }}>
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="m21 15-5-5L5 21"/>
+        </svg>
+      ),
+      action: () => setView("raider"),
+    },
+    {
+      id: "tg",
+      label: "Telegram Call",
+      desc: "Blast this token to call channels",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 20, height: 20 }}>
+          <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+        </svg>
+      ),
+      action: () => window.open("https://t.me/paxeernetwork", "_blank"),
+    },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 60 }}>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "1.5rem 1rem" : "2rem 2rem" }}>
+
+        {/* Back link */}
+        <button onClick={onBack} style={{
+          background: "none", border: "none", cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 8,
+          color: C.text2, fontFamily: "'DM Sans', sans-serif", fontSize: "0.875rem",
+          marginBottom: "1.5rem", padding: 0,
+        }}>
+          <span>←</span> Back to Markets
+        </button>
+
+        {/* ── RAID BAR ── */}
+        <div style={{
+          background: "#111113",
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: isMobile ? "1rem" : "1.25rem 1.5rem",
+          marginBottom: "1.25rem",
+        }}>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: "0.65rem",
+            letterSpacing: "0.08em", color: C.cyan, textTransform: "uppercase",
+            marginBottom: "1rem",
+          }}>⚡ Raid Options</div>
+
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
+            gap: 12,
+          }}>
+            {raidOptions.map(opt => (
+              <div key={opt.id} style={{
+                background: "#1a1a1e",
+                border: `1px solid ${C.border}`,
+                borderRadius: 12,
+                padding: "1rem",
+                display: "flex", flexDirection: "column", gap: 10,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    background: "rgba(61,139,94,0.10)",
+                    border: `1px solid rgba(61,139,94,0.2)`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: C.cyan, flexShrink: 0,
+                  }}>
+                    {opt.icon}
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.9rem", color: C.text }}>{opt.label}</div>
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.text3, marginTop: 2 }}>{opt.desc}</div>
+                  </div>
+                </div>
+                <button onClick={opt.action} style={{
+                  ...btnPrimary,
+                  padding: "0.5rem 1rem", fontSize: "0.8rem", width: "100%",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                }}>
+                  Raid
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── TOKEN HEADER (PaxFun style) ── */}
+        <div style={{
+          background: "#111113",
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: isMobile ? "1.25rem" : "1.5rem",
+          marginBottom: "1.25rem",
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+            {/* Avatar */}
+            <div style={{
+              width: 64, height: 64, borderRadius: 14,
+              background: "#1a1a1e", border: `1px solid ${C.border}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "2rem", flexShrink: 0, overflow: "hidden",
+            }}>
+              {token.image
+                ? <img src={token.image} alt={token.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
+                : token.emoji || "🪙"
+              }
+            </div>
+
+            {/* Name + address */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "1.4rem", color: C.text }}>{token.name}</span>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.9rem", color: C.text3 }}>{token.ticker}</span>
+                {token.promoted && (
+                  <span style={{
+                    fontFamily: "'DM Mono', monospace", fontSize: "0.6rem", letterSpacing: "0.06em",
+                    background: "rgba(61,139,94,0.15)", color: C.cyan,
+                    border: "1px solid rgba(61,139,94,0.3)", borderRadius: 4, padding: "2px 8px",
+                  }}>PROMOTED</span>
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.72rem", color: C.text3 }}>Token: {shortAddr}</span>
+                {token.address && (
+                  <button onClick={() => navigator.clipboard?.writeText(token.address)} style={{
+                    background: "none", border: "none", cursor: "pointer", color: C.text3, fontSize: "0.75rem", padding: 0,
+                  }}>⧉</button>
+                )}
+              </div>
+            </div>
+
+            {/* PaxFun link */}
+            <a href={`https://swap.sidiora.xyz/paxfun/${token.address}`} target="_blank" rel="noopener noreferrer" style={{
+              background: "#1a1a1e", border: `1px solid ${C.border}`,
+              borderRadius: 8, padding: "8px 12px",
+              fontFamily: "'DM Sans', sans-serif", fontSize: "0.78rem", color: C.text2,
+              textDecoration: "none", display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+            }}>
+              View on PaxFun ↗
+            </a>
+          </div>
+
+          {/* Stats bar */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)",
+            gap: 12, marginTop: "1.5rem",
+            borderTop: `1px solid ${C.border}`, paddingTop: "1.25rem",
+          }}>
+            {[
+              ["Price",       token.price   || "—"],
+              ["Market Cap",  token.mcap    || "—"],
+              ["24h Volume",  token.volume  || "—"],
+              ["Holders",     token.holders || "—"],
+              ["Swaps",       token.swaps   || "—"],
+            ].map(([label, val]) => (
+              <div key={label}>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.text3, marginBottom: 4 }}>{label}</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, fontSize: label === "Price" ? "1.3rem" : "1rem", color: C.text }}>{val}</div>
+                {label === "Price" && (
+                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.78rem", color: changeColor, marginTop: 2 }}>
+                    {isUp ? "+" : ""}{token.change?.toFixed(2)}%
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── PROMOTE CTA ── */}
+        {!token.promoted && (
+          <div style={{
+            background: "rgba(61,139,94,0.06)",
+            border: `1px solid rgba(61,139,94,0.2)`,
+            borderRadius: 16, padding: "1.25rem 1.5rem",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            flexWrap: "wrap", gap: 12,
+          }}>
+            <div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.95rem", color: C.text, marginBottom: 4 }}>
+                This token isn't promoted yet
+              </div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.text3 }}>
+                Deploy a raid campaign to boost visibility across X and Telegram
+              </div>
+            </div>
+            <button onClick={() => setView("promote")} style={{ ...btnPrimary, padding: "0.6rem 1.5rem" }}>
+              Promote This Token
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
 function Footer() {
   const isMobile = useIsMobile();
   return (
@@ -2221,6 +2451,7 @@ function Footer() {
 // ─── App (inner — has access to wagmi hooks) ──────────────────────────────────
 function AppInner() {
   const [view, setView]                   = useState("home");
+  const [selectedToken, setSelectedToken] = useState(null);
   const [showProfileSetup, setShowProfileSetup] = useState(false);
   const [profile, setProfile]             = useState(() => {
     try { return JSON.parse(localStorage.getItem("paxpromote_profile")) || null; } catch { return null; }
@@ -2233,6 +2464,8 @@ function AppInner() {
   const wallet = isConnected ? address : null;
   const onConnectClick = () => open();
   const onDisconnect = () => { disconnect(); };
+
+  const openToken = (token) => { setSelectedToken(token); setView("token"); };
 
   // Show profile setup modal on first connect
   useEffect(() => {
@@ -2285,11 +2518,12 @@ function AppInner() {
       {view === "home" && (
         <>
           <Hero setView={setView} onConnectClick={onConnectClick} />
-          <TokenSections setView={setView} />
+          <TokenSections setView={setView} onTokenClick={openToken} />
           <TiersPage setView={setView} />
           <Footer />
         </>
       )}
+      {view === "token"       && <><TokenDetailPage token={selectedToken} onBack={() => setView("home")} setView={setView} wallet={wallet} onConnectClick={onConnectClick} /><Footer /></>}
       {view === "leaderboard" && <><Leaderboard /><Footer /></>}
       {view === "dev"         && <><DevDashboard wallet={wallet} onConnectClick={onConnectClick} setView={setView} /><Footer /></>}
       {view === "raider"      && <><RaiderDashboard wallet={wallet} onConnectClick={onConnectClick} /><Footer /></>}
