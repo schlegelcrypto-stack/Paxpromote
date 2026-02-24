@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { defaultWagmiConfig } from "@web3modal/wagmi/react/config";
-import { WagmiProvider, useAccount, useDisconnect } from "wagmi";
+import { WagmiProvider, useAccount, useDisconnect, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
 
@@ -57,47 +57,52 @@ createWeb3Modal({
   },
 });
 
+const TREASURY = "0x7B8F14f23B774eba171D35eBfD9269B97907Fa8D";
+
 const TIERS = [
   {
     id: "word-out",
     name: "Get The Word Out",
     tagline: "Spark the conversation",
-    price: "500",
+    price: "100",
     color: "#4ade80",
     glow: "rgba(74,222,128,0.3)",
     icon: "📡",
-    features: ["5 Raiders assigned", "24hr campaign", "Basic X amplification", "Project card listing", "Performance report"],
+    features: ["3-5 Raiders assigned", "Basic X amplification", "Project card listing", "Performance report"],
   },
   {
     id: "make-noise",
     name: "Make Some Noise",
     tagline: "Build momentum",
-    price: "1,500",
+    price: "500",
     color: "#3d8b5e",
     glow: "rgba(61,139,94,0.3)",
     icon: "🔊",
-    features: ["15 Raiders assigned", "72hr campaign", "Boosted X amplification", "Trending hashtag push", "Artwork promotion", "Detailed analytics"],
+    comingSoon: true,
+    features: ["10-15 Raiders assigned", "Boosted X amplification", "Trending hashtag push", "Artwork promotion", "Detailed analytics"],
   },
   {
     id: "in-your-face",
     name: "In Your Face",
     tagline: "Dominate the feed",
-    price: "4,000",
+    price: "1,000",
     color: "#3d8b5e",
     glow: "rgba(61,139,94,0.30)",
     icon: "🔥",
     featured: true,
-    features: ["40 Raiders assigned", "7-day campaign", "Premium X raids", "Priority placement", "Community raids", "Meme & content package", "Live tracking dashboard"],
+    comingSoon: true,
+    features: ["30-40 Raiders assigned", "Premium X raids", "Priority placement", "Meme & content package", "Analytics"],
   },
   {
     id: "kol-package",
     name: "KOL Package",
     tagline: "Full-spectrum domination",
-    price: "12,000",
+    price: "Varies",
     color: "#a78bfa",
     glow: "rgba(167,139,250,0.35)",
     icon: "👑",
-    features: ["100+ Raiders assigned", "30-day campaign", "KOL endorsements", "Spaces events", "Viral content creation", "AMA coordination", "Dedicated campaign manager", "Real-time command center"],
+    comingSoon: true,
+    features: ["50+ Raiders assigned", "KOL endorsements", "Spaces events", "AMA coordination", "Dedicated campaign manager"],
   },
 ];
 
@@ -545,18 +550,21 @@ function Hero({ setView, onConnectClick }) {
 // ─── Token Card ───────────────────────────────────────────────────────────────
 function TokenAvatar({ token, size = 48 }) {
   const [imgError, setImgError] = useState(false);
-  // Generate a consistent color from token name for fallback
   const colors = ["#3d8b5e","#3b82f6","#a78bfa","#f59e0b","#ef4444","#06b6d4","#ec4899"];
-  const colorIdx = (token.name || "").charCodeAt(0) % colors.length;
-  const initials  = (token.name || "?").slice(0, 2).toUpperCase();
+  const colorIdx = (token.name || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0) % colors.length;
+  const initials = (token.name || "?").replace(/[^a-zA-Z0-9]/g, "").slice(0, 2).toUpperCase() || "??";
 
-  if (token.image && !imgError) {
+  // Try: token.image first, then known Sidiora S3 pattern by address
+  const imgSrc = token.image
+    || (token.address ? `https://us-east-1.ag-v2api.sidiora.xyz/api/launchpads/${token.address}/image` : null);
+
+  if (imgSrc && !imgError) {
     return (
       <img
-        src={token.image}
+        src={imgSrc}
         alt={token.name}
         onError={() => setImgError(true)}
-        style={{ width: size, height: size, borderRadius: 10, objectFit: "cover", flexShrink: 0 }}
+        style={{ width: size, height: size, borderRadius: 10, objectFit: "cover", flexShrink: 0, background: colors[colorIdx] }}
       />
     );
   }
@@ -566,7 +574,7 @@ function TokenAvatar({ token, size = 48 }) {
       background: colors[colorIdx],
       display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans', sans-serif", fontWeight: 700,
-      fontSize: size * 0.35, color: "#fff",
+      fontSize: size * 0.35, color: "#fff", letterSpacing: "-0.02em",
     }}>{initials}</div>
   );
 }
@@ -923,25 +931,32 @@ function TiersPage({ setView }) {
 
       <div style={{ maxWidth: 1400, margin: "0 auto", padding: isMobile ? "0 1.2rem" : "0 2rem", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem" }}>
         {TIERS.map((tier) => (
-          <div key={tier.id} onClick={() => { setSelected(tier.id); setView("promote"); }}
+          <div key={tier.id}
+            onClick={() => { if (!tier.comingSoon) { setSelected(tier.id); setView("promote"); } }}
             style={{
+              position: "relative", overflow: "hidden",
               background: tier.featured ? `linear-gradient(180deg, rgba(61,139,94,0.08) 0%, rgba(5,5,5,0.95) 100%)` : "rgba(255,255,255,0.02)",
-              border: `1px solid ${tier.featured ? C.cyan : C.border}`,
-              borderRadius: 12, padding: isMobile ? "1.8rem 1.5rem" : "2.5rem 2rem", cursor: "pointer", position: "relative",
+              border: `1px solid ${tier.featured && !tier.comingSoon ? C.cyan : C.border}`,
+              borderRadius: 12, padding: isMobile ? "1.8rem 1.5rem" : "2.5rem 2rem",
+              cursor: tier.comingSoon ? "default" : "pointer",
               transition: "all 0.3s ease",
-              boxShadow: tier.featured ? `0 0 40px ${C.cyanGlow}` : "none",
-              transform: !isMobile && tier.featured ? "translateY(-8px)" : "none",
+              boxShadow: tier.featured && !tier.comingSoon ? `0 0 40px ${C.cyanGlow}` : "none",
+              transform: !isMobile && tier.featured && !tier.comingSoon ? "translateY(-8px)" : "none",
+              opacity: tier.comingSoon ? 0.55 : 1,
             }}>
-            {tier.featured && (
+
+            {/* Coming Soon diagonal banner */}
+            {tier.comingSoon && (
               <div style={{
-                position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)",
-                background: `linear-gradient(135deg, ${C.cyan}, #2d6e4a)`,
-                color: "#ffffff", fontFamily: "'DM Sans', sans-serif",
-                fontWeight: 800, letterSpacing: "0.08em", fontSize: "0.65rem",
-                padding: "0.25rem 1rem",
-                
-                whiteSpace: "nowrap",
-              }}>MOST POPULAR</div>
+                position: "absolute", top: 24, right: -32,
+                background: "rgba(185,28,28,0.7)",
+                color: "rgba(255,255,255,0.9)",
+                fontFamily: "'DM Mono', monospace", fontSize: "0.6rem", fontWeight: 600,
+                letterSpacing: "0.08em", padding: "5px 40px",
+                transform: "rotate(35deg)",
+                pointerEvents: "none", whiteSpace: "nowrap",
+                zIndex: 2,
+              }}>COMING SOON</div>
             )}
 
             <div style={{ display: "flex", alignItems: isMobile ? "center" : "flex-start", justifyContent: "space-between", gap: 12, marginBottom: isMobile ? "1rem" : 0 }}>
@@ -953,7 +968,7 @@ function TiersPage({ setView }) {
               {isMobile && (
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.6rem", color: C.text, letterSpacing: "-0.04em", lineHeight: 1 }}>{tier.price}</div>
-                  <div style={{ color: C.cyan, fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.75rem" }}>PAX</div>
+                  <div style={{ color: C.cyan, fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.75rem" }}>{tier.price !== "Varies" ? "PAX" : ""}</div>
                 </div>
               )}
             </div>
@@ -961,14 +976,14 @@ function TiersPage({ setView }) {
             {!isMobile && (
               <div style={{ marginBottom: "2rem", marginTop: "2rem" }}>
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "2.8rem", color: C.text, letterSpacing: "-0.04em" }}>{tier.price}</span>
-                <span style={{ color: C.cyan, fontFamily: "'DM Sans', sans-serif", fontWeight: 700, marginLeft: "0.4rem" }}>PAX</span>
+                {tier.price !== "Varies" && <span style={{ color: C.cyan, fontFamily: "'DM Sans', sans-serif", fontWeight: 700, marginLeft: "0.4rem" }}>PAX</span>}
               </div>
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "1.5rem", marginTop: isMobile ? "0.75rem" : 0 }}>
               {tier.features.map(f => (
                 <div key={f} style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-                  <div style={{ width: 16, height: 16, borderRadius: 10, background: tier.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ width: 16, height: 16, borderRadius: 10, background: tier.comingSoon ? "#333" : tier.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <span style={{ fontSize: "0.6rem", color: "#ffffff", fontWeight: 900 }}>✓</span>
                   </div>
                   <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.85rem", color: C.text2 }}>{f}</span>
@@ -976,16 +991,20 @@ function TiersPage({ setView }) {
               ))}
             </div>
 
-            <button style={{
-              width: "100%",
-              background: tier.featured ? `linear-gradient(135deg, ${C.cyan}, #2d6e4a)` : "transparent",
-              border: `1px solid ${tier.color}`,
-              color: tier.featured ? "#ffffff" : tier.color,
-              padding: "0.85rem",
-              fontFamily: "'DM Sans', sans-serif", fontWeight: 800,
-              letterSpacing: "0.05em", fontSize: "0.85rem", cursor: "pointer",
-              
-            }}>DEPLOY CAMPAIGN</button>
+            <button
+              disabled={tier.comingSoon}
+              style={{
+                width: "100%",
+                background: tier.comingSoon ? "transparent" : tier.featured ? `linear-gradient(135deg, ${C.cyan}, #2d6e4a)` : "transparent",
+                border: `1px solid ${tier.comingSoon ? "#333" : tier.color}`,
+                color: tier.comingSoon ? "#555" : tier.featured ? "#ffffff" : tier.color,
+                padding: "0.85rem",
+                fontFamily: "'DM Sans', sans-serif", fontWeight: 800,
+                letterSpacing: "0.05em", fontSize: "0.85rem",
+                cursor: tier.comingSoon ? "default" : "pointer",
+              }}>
+              {tier.comingSoon ? "COMING SOON" : "DEPLOY CAMPAIGN"}
+            </button>
           </div>
         ))}
       </div>
@@ -1275,16 +1294,93 @@ function RaiderDashboard({ wallet, onConnectClick }) {
 
 // ─── Promote ──────────────────────────────────────────────────────────────────
 function PromotePage({ wallet, onConnectClick }) {
-  const [step, setStep] = useState(1);
+  const [step, setStep]             = useState(1);
   const [selectedTier, setSelectedTier] = useState(null);
-  const [form, setForm] = useState({ tokenName: "", contractAddress: "", xHandle: "", description: "", launchpadUrl: "" });
+  const [form, setForm]             = useState({ tokenName: "", contractAddress: "", xHandle: "", description: "", launchpadUrl: "" });
+  const [txStatus, setTxStatus]     = useState("idle"); // idle | pending | confirming | success | error
+  const [txError, setTxError]       = useState(null);
   const isMobile = useIsMobile();
+
+  const { sendTransaction, data: txHash } = useSendTransaction();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+
+  // Watch confirmation
+  useEffect(() => {
+    if (isConfirming) setTxStatus("confirming");
+    if (isConfirmed) {
+      setTxStatus("success");
+      // Save campaign to localStorage
+      const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+      campaigns.push({
+        id: Date.now(),
+        token: form.tokenName,
+        contractAddress: form.contractAddress,
+        xHandle: form.xHandle,
+        tier: selectedTier?.name,
+        tierId: selectedTier?.id,
+        paxAmount: selectedTier?.price,
+        txHash,
+        deployedAt: new Date().toISOString(),
+        status: "active",
+      });
+      localStorage.setItem("paxpromote_campaigns", JSON.stringify(campaigns));
+    }
+  }, [isConfirming, isConfirmed]);
+
+  const handlePayAndDeploy = () => {
+    if (!wallet || !selectedTier) return;
+    setTxStatus("pending");
+    setTxError(null);
+
+    const paxAmount = parseFloat(selectedTier.price.replace(/,/g, ""));
+    const valueWei = BigInt(Math.floor(paxAmount * 1e18)).toString();
+
+    sendTransaction(
+      {
+        to: TREASURY,
+        value: BigInt(valueWei),
+      },
+      {
+        onError: (err) => {
+          setTxStatus("error");
+          setTxError(err?.shortMessage || err?.message || "Transaction rejected");
+        },
+      }
+    );
+  };
 
   const inputStyle = {
     width: "100%", background: "#1a1a1e", border: `1px solid ${C.border}`,
     color: C.text, padding: "0.75rem 1rem", fontFamily: "'DM Sans', sans-serif", fontSize: "0.9rem",
     borderRadius: 10, outline: "none", boxSizing: "border-box",
   };
+
+  // ── Success screen ──
+  if (txStatus === "success") {
+    return (
+      <div style={{ minHeight: "100vh", paddingTop: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center", maxWidth: 480, padding: "0 2rem" }}>
+          <div style={{ fontSize: "4rem", marginBottom: "1.5rem" }}>🚀</div>
+          <h2 style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "2.2rem", color: C.text, letterSpacing: "-0.04em", marginBottom: "1rem" }}>
+            Campaign <span style={{ color: C.cyan }}>Live!</span>
+          </h2>
+          <p style={{ fontFamily: "'DM Sans', sans-serif", color: C.text2, fontSize: "0.95rem", lineHeight: 1.7, marginBottom: "1.5rem" }}>
+            Your <strong style={{ color: C.text }}>{selectedTier?.name}</strong> campaign for <strong style={{ color: C.text }}>{form.tokenName}</strong> is now active. Raiders are being deployed.
+          </p>
+          {txHash && (
+            <a href={`https://paxscan.paxeer.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "'DM Mono', monospace", fontSize: "0.75rem", color: C.cyan, textDecoration: "none", marginBottom: "2rem" }}>
+              View on Paxscan ↗
+            </a>
+          )}
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={() => { setStep(1); setTxStatus("idle"); setSelectedTier(null); setForm({ tokenName: "", contractAddress: "", xHandle: "", description: "", launchpadUrl: "" }); }}
+              style={{ ...btnGhost, padding: "0.7rem 1.5rem" }}>New Campaign</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", paddingTop: isMobile ? 90 : 120, paddingBottom: 80 }}>
@@ -1296,192 +1392,167 @@ function PromotePage({ wallet, onConnectClick }) {
           </h2>
         </div>
 
-        {/* Steps */}
-        <div style={{ display: "flex", gap: isMobile ? "0.25rem" : "0.5rem", alignItems: "center", marginBottom: isMobile ? "2rem" : "3rem", justifyContent: "center" }}>
+        {/* Step indicator */}
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: isMobile ? "0.5rem" : "1rem", marginBottom: "2.5rem" }}>
           {[["01", isMobile ? "Tier" : "Select Tier"], ["02", isMobile ? "Token" : "Token Info"], ["03", isMobile ? "Deploy" : "Pay & Deploy"]].map(([num, label], i) => (
-            <div key={num} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", opacity: step === i + 1 ? 1 : 0.4 }}
-                onClick={() => step > i + 1 && setStep(i + 1)}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: 10,
-                  background: step >= i + 1 ? C.cyan : "rgba(255,255,255,0.08)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "0.7rem",
-                  color: step >= i + 1 ? "#ffffff" : C.text3,
-                  boxShadow: step >= i + 1 ? `0 0 12px ${C.cyanGlow}` : "none",
-                }}>{num}</div>
-                <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, letterSpacing: "0.06em", fontSize: "0.8rem", color: step === i + 1 ? C.text : C.text3 }}>{label}</span>
-              </div>
-              {i < 2 && <div style={{ width: 40, height: 1, background: C.border }} />}
+            <div key={num} style={{ display: "flex", alignItems: "center", gap: isMobile ? "0.5rem" : "1rem", cursor: "pointer", opacity: step === i + 1 ? 1 : 0.4 }}
+              onClick={() => { if (i + 1 < step) setStep(i + 1); }}>
+              <div style={{
+                width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                background: step >= i + 1 ? C.cyan : "transparent",
+                border: `1.5px solid ${step >= i + 1 ? C.cyan : C.border}`,
+                fontFamily: "'DM Mono', monospace", fontSize: "0.7rem", fontWeight: 700,
+                color: step >= i + 1 ? "#ffffff" : C.text3,
+              }}>{step > i + 1 ? "✓" : num}</div>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, letterSpacing: "0.06em", fontSize: "0.8rem", color: step === i + 1 ? C.text : C.text3 }}>{label}</span>
+              {i < 2 && <span style={{ color: C.border, fontSize: "0.8rem" }}>—</span>}
             </div>
           ))}
         </div>
 
+        {/* Step 1 — Tier */}
         {step === 1 && (
-          <div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "1rem", marginBottom: "2rem" }}>
-              {TIERS.map(tier => (
-                <div key={tier.id} onClick={() => setSelectedTier(tier)} style={{
-                  background: selectedTier?.id === tier.id ? C.cyanDim : tier.featured ? "rgba(61,139,94,0.03)" : "rgba(255,255,255,0.02)",
-                  border: `1px solid ${selectedTier?.id === tier.id ? C.cyan : tier.featured ? C.cyanBorder : C.border}`,
-                  borderRadius: 8, padding: "1.5rem", cursor: "pointer",
-                  boxShadow: selectedTier?.id === tier.id ? `0 0 20px ${C.cyanGlow}` : tier.featured ? `0 0 16px ${C.cyanGlow}` : "none",
-                  transition: "all 0.2s", position: "relative",
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: "1rem" }}>
+            {TIERS.map(tier => (
+              <div key={tier.id}
+                onClick={() => { if (!tier.comingSoon) { setSelectedTier(tier); setStep(2); } }}
+                style={{
+                  position: "relative", overflow: "hidden",
+                  background: selectedTier?.id === tier.id ? `rgba(61,139,94,0.10)` : "#111113",
+                  border: `1px solid ${selectedTier?.id === tier.id ? C.cyan : tier.comingSoon ? C.border : C.cyan}`,
+                  borderRadius: 14, padding: "1.5rem",
+                  cursor: tier.comingSoon ? "default" : "pointer",
+                  transition: "all 0.15s",
+                  opacity: tier.comingSoon ? 0.6 : 1,
                 }}>
-                  {tier.featured && (
-                    <div style={{
-                      position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)",
-                      background: `linear-gradient(135deg, ${C.cyan}, #2d6e4a)`,
-                      color: "#ffffff", fontFamily: "'DM Sans', sans-serif",
-                      fontWeight: 800, letterSpacing: "0.05em", fontSize: "0.55rem",
-                      padding: "0.2rem 0.75rem",
-                      
-                      whiteSpace: "nowrap",
-                    }}>MOST POPULAR</div>
-                  )}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
-                    <div>
-                      <div style={{ fontSize: "1.4rem", marginBottom: "0.3rem" }}>{tier.icon}</div>
-                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1.1rem", color: tier.color, letterSpacing: "-0.02em" }}>{tier.name}</div>
-                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.78rem", color: C.text3, marginTop: 2 }}>{tier.tagline}</div>
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.6rem", fontWeight: 700, color: C.text, letterSpacing: "-0.04em" }}>{tier.price}</div>
-                      <div style={{ color: C.cyan, fontSize: "0.75rem", fontFamily: "'DM Sans', sans-serif", fontWeight: 700 }}>PAX</div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                    {tier.features.map(f => (
-                      <div key={f} style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
-                        <div style={{ width: 14, height: 14, borderRadius: 2, background: selectedTier?.id === tier.id ? C.cyan : tier.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <span style={{ fontSize: "0.55rem", color: "#ffffff", fontWeight: 900 }}>✓</span>
-                        </div>
-                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.text2 }}>{f}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedTier?.id === tier.id && (
-                    <div style={{ marginTop: "1rem", fontFamily: "'DM Mono', monospace", fontSize: "0.65rem", color: C.cyan, letterSpacing: "0.1em" }}>✓ SELECTED</div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button onClick={() => selectedTier && setStep(2)} style={{
-              width: "100%",
-              background: selectedTier ? `linear-gradient(135deg, ${C.cyan}, #2d6e4a)` : "rgba(255,255,255,0.05)",
-              border: "none", color: selectedTier ? "#ffffff" : C.text3, padding: "1rem",
-              fontFamily: "'DM Sans', sans-serif", fontWeight: 800, letterSpacing: "0.05em",
-              fontSize: "0.95rem", cursor: selectedTier ? "pointer" : "not-allowed",
-              
-            }}>CONTINUE TO TOKEN INFO →</button>
-          </div>
-        )}
 
-        {step === 2 && (
-          <div style={{ background: "#1a1a1e", border: `1px solid ${C.border}`, borderRadius: 12, padding: isMobile ? "1.25rem" : "2rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-            {[
-              ["TOKEN NAME / TICKER", "tokenName", "e.g. PEPE Token · $PEPE"],
-              ["CONTRACT ADDRESS (optional)", "contractAddress", "0x..."],
-              ["X (TWITTER) HANDLE TO RAID", "xHandle", "@YourTokenHandle"],
-              ["PAXFUN LAUNCHPAD URL", "launchpadUrl", "https://paxfun.app/token/..."],
-            ].map(([label, field, placeholder]) => (
-              <div key={field}>
-                <div style={labelStyle}>{label}</div>
-                <input placeholder={placeholder} value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })}
-                  style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = C.cyanBorder}
-                  onBlur={e => e.target.style.borderColor = C.border} />
+                {/* Coming Soon diagonal banner */}
+                {tier.comingSoon && (
+                  <div style={{
+                    position: "absolute", top: 18, right: -28,
+                    background: "rgba(185,28,28,0.75)",
+                    color: "rgba(255,255,255,0.9)",
+                    fontFamily: "'DM Mono', monospace", fontSize: "0.58rem", fontWeight: 600,
+                    letterSpacing: "0.08em", padding: "4px 36px",
+                    transform: "rotate(35deg)",
+                    pointerEvents: "none", whiteSpace: "nowrap",
+                    zIndex: 2,
+                  }}>COMING SOON</div>
+                )}
+
+                {!tier.comingSoon && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.6rem", color: C.cyan, letterSpacing: "0.08em", marginBottom: 12 }}>★ AVAILABLE NOW</div>}
+                <div style={{ fontSize: "1.8rem", marginBottom: 8 }}>{tier.icon}</div>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "1.1rem", color: tier.color, marginBottom: 4 }}>{tier.name}</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.4rem", fontWeight: 700, color: C.text, marginBottom: 4 }}>
+                  {tier.price}{tier.price !== "Varies" && <span style={{ fontSize: "0.9rem", color: C.text2 }}> PAX</span>}
+                </div>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.text3, marginBottom: 12 }}>{tier.tagline}</div>
+                {tier.features.slice(0, 3).map(f => (
+                  <div key={f} style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.text2, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: tier.comingSoon ? C.text3 : C.cyan, fontSize: "0.65rem" }}>✓</span> {f}
+                  </div>
+                ))}
               </div>
             ))}
-            <div>
-              <div style={labelStyle}>Project Description</div>
-              <textarea rows={4} placeholder="Tell raiders about your project..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-                style={{ ...inputStyle, resize: "vertical" }}
-                onFocus={e => e.target.style.borderColor = C.cyanBorder}
-                onBlur={e => e.target.style.borderColor = C.border} />
-            </div>
-            <div>
-              <div style={labelStyle}>Campaign Artwork</div>
-              <div style={{
-                border: `2px dashed ${C.cyanBorder}`, borderRadius: 12, padding: "2rem",
-                textAlign: "center", cursor: "pointer", color: C.text3,
-                fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.06em", fontSize: "0.85rem",
-                transition: "background 0.2s",
-              }}>
-                <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🖼️</div>
-                DRAG & DROP OR CLICK TO UPLOAD<br />
-                <span style={{ fontSize: "0.75rem", color: C.text3 }}>PNG, JPG, GIF · Max 10MB</span>
+          </div>
+        )}
+
+        {/* Step 2 — Token info */}
+        {step === 2 && (
+          <div style={{ background: "#111113", border: `1px solid ${C.border}`, borderRadius: 14, padding: "2rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "1rem", color: C.text, marginBottom: 4 }}>Token Details</div>
+            {[
+              ["tokenName",        "Token Name *",           "e.g. PaxieFun"],
+              ["contractAddress",  "Contract Address *",     "0x..."],
+              ["xHandle",          "X (Twitter) Handle",     "@yourtoken"],
+              ["launchpadUrl",     "PaxFun URL",             "https://swap.sidiora.xyz/paxfun/0x..."],
+              ["description",      "Campaign Brief",         "What makes your token special?"],
+            ].map(([key, label, placeholder]) => (
+              <div key={key}>
+                <div style={{ ...labelStyle, marginBottom: 6 }}>{label}</div>
+                {key === "description"
+                  ? <textarea rows={3} placeholder={placeholder} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} style={{ ...inputStyle, resize: "vertical" }} />
+                  : <input placeholder={placeholder} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} style={inputStyle} />
+                }
               </div>
-            </div>
-            <div style={{ display: "flex", gap: "1rem" }}>
-              <button onClick={() => setStep(1)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.85rem", fontFamily: "'DM Sans', sans-serif", fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", borderRadius: 10 }}>← BACK</button>
-              <button onClick={() => setStep(3)} style={{
-                flex: 2, ...btnPrimary, padding: "0.85rem",
-                
-              }}>CONTINUE TO PAYMENT →</button>
+            ))}
+            <div style={{ display: "flex", gap: "1rem", marginTop: 8 }}>
+              <button onClick={() => setStep(1)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.85rem", fontFamily: "'DM Sans', sans-serif", fontWeight: 600, cursor: "pointer", borderRadius: 10 }}>← Back</button>
+              <button onClick={() => { if (form.tokenName && form.contractAddress) setStep(3); }}
+                disabled={!form.tokenName || !form.contractAddress}
+                style={{ flex: 2, ...btnPrimary, padding: "0.85rem", opacity: form.tokenName && form.contractAddress ? 1 : 0.4 }}>
+                Continue →
+              </button>
             </div>
           </div>
         )}
 
+        {/* Step 3 — Pay & Deploy */}
         {step === 3 && (
           <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-            <div style={{ background: "#1a1a1e", border: `1px solid ${C.border}`, borderRadius: 12, padding: "2rem" }}>
-              <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1.1rem", color: C.text, marginBottom: "1.5rem", letterSpacing: "-0.02em" }}>ORDER SUMMARY</div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
-                <span style={{ color: C.text2, fontFamily: "'DM Sans', sans-serif" }}>Campaign Tier</span>
-                <span style={{ color: C.text, fontFamily: "'DM Sans', sans-serif", fontWeight: 700 }}>{selectedTier?.name || "In Your Face"}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
-                <span style={{ color: C.text2, fontFamily: "'DM Sans', sans-serif" }}>Token</span>
-                <span style={{ color: C.text, fontFamily: "'DM Sans', sans-serif" }}>{form.tokenName || "—"}</span>
-              </div>
-              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: "1rem", display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, color: C.text2, letterSpacing: "0.08em" }}>TOTAL</span>
+            {/* Order summary */}
+            <div style={{ background: "#111113", border: `1px solid ${C.border}`, borderRadius: 14, padding: "1.75rem" }}>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "1rem", color: C.text, marginBottom: "1.25rem" }}>Order Summary</div>
+              {[
+                ["Tier",             selectedTier?.name || "—"],
+                ["Token",            form.tokenName || "—"],
+                ["Contract",         form.contractAddress ? `${form.contractAddress.slice(0,8)}...${form.contractAddress.slice(-6)}` : "—"],
+                ["To (Treasury)",    `${TREASURY.slice(0,8)}...${TREASURY.slice(-6)}`],
+              ].map(([label, val]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.85rem" }}>
+                  <span style={{ color: C.text3, fontFamily: "'DM Sans', sans-serif", fontSize: "0.875rem" }}>{label}</span>
+                  <span style={{ color: C.text, fontFamily: "'DM Mono', monospace", fontSize: "0.875rem" }}>{val}</span>
+                </div>
+              ))}
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: "1rem", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, color: C.text2 }}>Total</span>
                 <div>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "2rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{selectedTier?.price || "4,000"}</span>
-                  <span style={{ color: C.cyan, fontFamily: "'DM Sans', sans-serif", fontWeight: 700, marginLeft: "0.4rem" }}>PAX</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "2rem", fontWeight: 700, color: C.cyan }}>{selectedTier?.price}</span>
+                  <span style={{ color: C.cyan, fontFamily: "'DM Sans', sans-serif", fontWeight: 700, marginLeft: 6 }}>PAX</span>
                 </div>
               </div>
             </div>
 
-            <div style={{ background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, borderRadius: 12, padding: "2rem" }}>
-              <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1rem", color: C.cyan, marginBottom: "1.5rem", letterSpacing: "-0.01em" }}>PAX TOKEN PAYMENT</div>
+            {/* Payment */}
+            <div style={{ background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, borderRadius: 14, padding: "1.75rem" }}>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "1rem", color: C.cyan, marginBottom: "1.25rem" }}>Pay with PAX</div>
 
               {wallet ? (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  background: "rgba(61,139,94,0.05)", border: `1px solid ${C.cyanBorder}`,
-                  borderRadius: 6, padding: "12px 16px", marginBottom: "1rem",
-                }}>
-                  <span style={{ width: 9, height: 9, borderRadius: "50%", background: C.green, boxShadow: `0 0 8px ${C.green}`, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.8rem", color: C.green }}>WALLET CONNECTED</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.78rem", color: C.text2, marginTop: 2 }}>{wallet}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(61,139,94,0.06)", border: `1px solid ${C.cyanBorder}`, borderRadius: 8, padding: "12px 16px", marginBottom: "1.25rem" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.78rem", color: C.green }}>Wallet Connected</div>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.72rem", color: C.text2, marginTop: 2 }}>{wallet.slice(0,10)}...{wallet.slice(-8)}</div>
                   </div>
                 </div>
               ) : (
-                <>
-                  <div style={labelStyle}>Your Wallet Address</div>
-                  <input placeholder="Connect your PAX wallet..." style={{ ...inputStyle, borderColor: C.cyanBorder, marginBottom: "1rem" }}
-                    onFocus={e => e.target.style.borderColor = C.cyan}
-                    onBlur={e => e.target.style.borderColor = C.cyanBorder} />
-                  <button onClick={onConnectClick} style={{
-                    width: "100%", background: C.cyanDim,
-                    border: `1px solid ${C.cyanBorder}`, color: C.cyan, padding: "0.85rem",
-                    fontFamily: "'DM Sans', sans-serif", fontWeight: 700, letterSpacing: "0.05em",
-                    fontSize: "0.9rem", cursor: "pointer", borderRadius: 10, marginBottom: "1rem",
-                  }}>CONNECT WALLET VIA WALLETCONNECT</button>
-                </>
+                <button onClick={onConnectClick} style={{ width: "100%", ...btnPrimary, padding: "0.85rem", marginBottom: "1.25rem" }}>
+                  Connect Wallet
+                </button>
+              )}
+
+              {/* Error */}
+              {txStatus === "error" && txError && (
+                <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", marginBottom: "1rem", fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.red }}>
+                  {txError}
+                </div>
               )}
 
               <div style={{ display: "flex", gap: "1rem" }}>
-                <button onClick={() => setStep(2)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.85rem", fontFamily: "'DM Sans', sans-serif", fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", borderRadius: 10 }}>← BACK</button>
-                <button disabled={!wallet} style={{
-                  flex: 2, ...btnPrimary, padding: "0.85rem",
-                  
-                  opacity: wallet ? 1 : 0.4, cursor: wallet ? "pointer" : "not-allowed",
-                  filter: "none",
-                }}>SUBMIT PAYMENT & DEPLOY 🚀</button>
+                <button onClick={() => setStep(2)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.85rem", fontFamily: "'DM Sans', sans-serif", fontWeight: 600, cursor: "pointer", borderRadius: 10 }}>← Back</button>
+                <button
+                  onClick={handlePayAndDeploy}
+                  disabled={!wallet || txStatus === "pending" || txStatus === "confirming"}
+                  style={{
+                    flex: 2, ...btnPrimary, padding: "0.85rem",
+                    opacity: wallet && txStatus === "idle" || txStatus === "error" ? 1 : 0.6,
+                    cursor: wallet ? "pointer" : "not-allowed",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  }}>
+                  {txStatus === "pending"    && <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} /> Confirm in Wallet…</>}
+                  {txStatus === "confirming" && <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} /> Confirming…</>}
+                  {(txStatus === "idle" || txStatus === "error") && <>Deploy Campaign 🚀</>}
+                </button>
               </div>
             </div>
           </div>
