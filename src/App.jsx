@@ -439,6 +439,288 @@ function Hero({ setView, onConnectClick }) {
   );
 }
 
+// ─── Token Card ───────────────────────────────────────────────────────────────
+function TokenCard({ token, onPromote }) {
+  const [hovered, setHovered] = useState(false);
+  const isUp = token.change >= 0;
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        minWidth: 200, maxWidth: 200,
+        background: hovered ? "rgba(0,224,255,0.05)" : "#0c0c0e",
+        border: `1px solid ${hovered ? C.cyanBorder : C.border}`,
+        borderRadius: 10, padding: "16px",
+        cursor: "pointer", flexShrink: 0,
+        transition: "all 0.2s",
+        transform: hovered ? "translateY(-4px)" : "translateY(0)",
+        boxShadow: hovered ? `0 8px 24px rgba(0,0,0,0.4), 0 0 16px ${C.cyanGlow}` : "none",
+        position: "relative", overflow: "hidden",
+      }}>
+
+      {/* Token image / logo */}
+      <div style={{
+        width: "100%", height: 120, borderRadius: 8,
+        background: token.image
+          ? "transparent"
+          : `linear-gradient(135deg, ${token.color || "rgba(0,224,255,0.15)"}, rgba(5,5,5,0.8))`,
+        marginBottom: 12, overflow: "hidden",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        border: `1px solid ${C.border}`,
+      }}>
+        {token.image
+          ? <img src={token.image} alt={token.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          : <span style={{ fontSize: "3rem" }}>{token.emoji || "🪙"}</span>
+        }
+      </div>
+
+      {/* Name + ticker */}
+      <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.9rem", letterSpacing: "-0.01em", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {token.name}
+      </div>
+      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.7rem", color: C.cyan, marginBottom: 10 }}>
+        {token.ticker}
+      </div>
+
+      {/* Price + change */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.78rem", color: C.text2 }}>
+          {token.price || "—"}
+        </div>
+        <div style={{
+          fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: "0.72rem",
+          color: isUp ? C.green : "#ff4060",
+          background: isUp ? "rgba(0,240,160,0.1)" : "rgba(255,64,96,0.1)",
+          padding: "2px 7px", borderRadius: 20,
+        }}>
+          {isUp ? "+" : ""}{token.change?.toFixed(1)}%
+        </div>
+      </div>
+
+      {/* Promote button on hover */}
+      {hovered && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onPromote(token); }}
+          style={{
+            width: "100%", ...btnPrimary, padding: "0.5rem",
+            fontSize: "0.72rem", clipPath: "polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%)",
+            animation: "modalIn 0.15s ease",
+          }}>
+          PROMOTE TOKEN
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Token Row (Netflix-style) ────────────────────────────────────────────────
+function TokenRow({ title, badge, badgeColor, tokens, loading, error, onPromote }) {
+  const rowRef = useRef(null);
+
+  const scroll = (dir) => {
+    if (rowRef.current) rowRef.current.scrollBy({ left: dir * 440, behavior: "smooth" });
+  };
+
+  return (
+    <div style={{ marginBottom: "3rem" }}>
+      {/* Row header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: "1.2rem", padding: "0 2rem" }}>
+        <h3 style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.3rem", letterSpacing: "-0.03em", margin: 0 }}>
+          {title}
+        </h3>
+        {badge && (
+          <span style={{
+            fontFamily: "'Space Mono', monospace", fontSize: "0.6rem", letterSpacing: "0.12em",
+            padding: "3px 10px", borderRadius: 20,
+            background: `${badgeColor}22`, color: badgeColor,
+            border: `1px solid ${badgeColor}44`,
+          }}>{badge}</span>
+        )}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          {["←", "→"].map((arrow, i) => (
+            <button key={arrow} onClick={() => scroll(i === 0 ? -1 : 1)} style={{
+              background: "rgba(255,255,255,0.06)", border: `1px solid ${C.border}`,
+              color: C.text2, width: 30, height: 30, borderRadius: "50%",
+              fontFamily: "'Inter', sans-serif", fontSize: "0.85rem",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.15s",
+            }}>{arrow}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Scroll track */}
+      <div style={{ position: "relative" }}>
+        {/* Fade edges */}
+        <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 60, zIndex: 2, background: "linear-gradient(90deg, #050505, transparent)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 60, zIndex: 2, background: "linear-gradient(270deg, #050505, transparent)", pointerEvents: "none" }} />
+
+        <div ref={rowRef} style={{
+          display: "flex", gap: 14, overflowX: "auto", paddingLeft: "2rem", paddingRight: "2rem",
+          scrollbarWidth: "none", msOverflowStyle: "none",
+        }}
+          onMouseDown={e => {
+            const el = rowRef.current;
+            let startX = e.pageX - el.offsetLeft;
+            let scrollLeft = el.scrollLeft;
+            const move = (e) => { el.scrollLeft = scrollLeft - (e.pageX - el.offsetLeft - startX); };
+            const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
+            document.addEventListener("mousemove", move);
+            document.addEventListener("mouseup", up);
+          }}
+        >
+          {loading && Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} style={{
+              minWidth: 200, height: 220, borderRadius: 10,
+              background: "linear-gradient(90deg, #0c0c0e 25%, #141416 50%, #0c0c0e 75%)",
+              flexShrink: 0, border: `1px solid ${C.border}`,
+              animation: "pulse 1.5s ease infinite",
+            }} />
+          ))}
+
+          {error && (
+            <div style={{ fontFamily: "'Inter', sans-serif", color: C.text3, fontSize: "0.85rem", padding: "2rem" }}>
+              Could not load tokens — {error}
+            </div>
+          )}
+
+          {!loading && !error && tokens.map((token, i) => (
+            <TokenCard key={token.address || i} token={token} onPromote={onPromote} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Mock promoted tokens (manually curated) ─────────────────────────────────
+const PROMOTED_TOKENS = [
+  { name: "NOVA Token",   ticker: "$NOVA",  change: 24.1, price: "0.00042 PAX", emoji: "⭐", color: "rgba(251,191,36,0.2)",  promoted: true },
+  { name: "AstroDAO",     ticker: "$ASTRO", change: 8.7,  price: "0.00018 PAX", emoji: "🚀", color: "rgba(0,224,255,0.15)",  promoted: true },
+  { name: "MoonFi",       ticker: "$MOON",  change: -2.4, price: "0.00009 PAX", emoji: "🌕", color: "rgba(167,139,250,0.2)", promoted: true },
+  { name: "PaxDragon",    ticker: "$DRAGO", change: 55.2, price: "0.00130 PAX", emoji: "🐉", color: "rgba(239,68,68,0.2)",   promoted: true },
+  { name: "SolarPax",     ticker: "$SOL",   change: 12.0, price: "0.00077 PAX", emoji: "☀️", color: "rgba(251,146,60,0.2)",  promoted: true },
+  { name: "VaultX",       ticker: "$VX",    change: -5.1, price: "0.00033 PAX", emoji: "🔐", color: "rgba(74,222,128,0.15)", promoted: true },
+  { name: "StealthNode",  ticker: "$STN",   change: 31.8, price: "0.00061 PAX", emoji: "👁️", color: "rgba(0,224,255,0.1)",   promoted: true },
+  { name: "PaxRocket",    ticker: "$PRKX",  change: 18.5, price: "0.00022 PAX", emoji: "🛸", color: "rgba(167,139,250,0.15)", promoted: true },
+];
+
+// ─── Token Sections (fetches from Paxeer Launchpad API) ───────────────────────
+function useTokens(endpoint) {
+  const [tokens, setTokens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]   = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch(endpoint, { headers: { "Accept": "application/json" } })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(data => {
+        // Normalise Paxeer Launchpad API response
+        const list = Array.isArray(data) ? data : data.data || data.tokens || data.markets || data.result || [];
+        const normalised = list.slice(0, 24).map(t => ({
+          name:    t.name        || t.tokenName   || t.token_name  || "Unknown",
+          ticker:  t.symbol      || t.ticker      || t.tokenSymbol || "???",
+          price:   t.price != null
+                     ? `${parseFloat(t.price).toFixed(6)} PAX`
+                     : t.priceUsd != null
+                       ? `$${parseFloat(t.priceUsd).toFixed(6)}`
+                       : "—",
+          change:  parseFloat(t.priceChange24h ?? t.price_change_24h ?? t.change ?? t.priceChange ?? 0),
+          image:   t.image       || t.logo        || t.imageUrl    || t.logoUrl || null,
+          address: t.address     || t.contract    || t.tokenAddress || t.id,
+          emoji:   "🪙",
+          color:   "rgba(0,224,255,0.12)",
+        }));
+        setTokens(normalised);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [endpoint]);
+
+  return { tokens, loading, error };
+}
+
+function TokenSections({ setView }) {
+  // Paxeer Launchpad REST API endpoints
+  const BASE             = "https://launchpad.paxeer.app";
+  const PAXEER_NEW       = `${BASE}/api/v1/markets/new`;
+  const PAXEER_HOT       = `${BASE}/api/v1/markets/hot`;
+  const PAXEER_GAINERS   = `${BASE}/api/v1/markets/gainers`;
+
+  const newTokens      = useTokens(PAXEER_NEW);
+  const hotTokens      = useTokens(PAXEER_HOT);
+  const gainerTokens   = useTokens(PAXEER_GAINERS);
+
+  const handlePromote = () => setView("promote");
+
+  return (
+    <div style={{ background: "#050505", paddingTop: "4rem", paddingBottom: "2rem" }}>
+      <div style={{ maxWidth: 1600, margin: "0 auto" }}>
+
+        {/* Section header */}
+        <div style={{ padding: "0 2rem", marginBottom: "3rem", textAlign: "center" }}>
+          <div style={{ fontFamily: "'Space Mono', monospace", letterSpacing: "0.2em", color: C.cyan, fontSize: "0.65rem", marginBottom: "0.75rem", textTransform: "uppercase" }}>Live on Paxfun</div>
+          <h2 style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "clamp(2rem, 5vw, 3.2rem)", letterSpacing: "-0.04em", margin: 0 }}>
+            EXPLORE <span style={{ color: C.cyan }}>TOKENS</span>
+          </h2>
+        </div>
+
+        {/* Promoted */}
+        <TokenRow
+          title="🔥 Promoted Tokens"
+          badge="SPONSORED"
+          badgeColor={C.cyan}
+          tokens={PROMOTED_TOKENS}
+          loading={false}
+          error={null}
+          onPromote={handlePromote}
+        />
+
+        {/* New Tokens */}
+        <TokenRow
+          title="✨ New Tokens"
+          badge="JUST LAUNCHED"
+          badgeColor={C.green}
+          tokens={newTokens.tokens}
+          loading={newTokens.loading}
+          error={newTokens.error}
+          onPromote={handlePromote}
+        />
+
+        {/* Hot Tokens */}
+        <TokenRow
+          title="🌶️ Hot Right Now"
+          badge="TRENDING"
+          badgeColor="#f59e0b"
+          tokens={hotTokens.tokens}
+          loading={hotTokens.loading}
+          error={hotTokens.error}
+          onPromote={handlePromote}
+        />
+
+        {/* Top Gainers */}
+        <TokenRow
+          title="📈 Top Gainers"
+          badge="24H GAINERS"
+          badgeColor={C.green}
+          tokens={gainerTokens.tokens}
+          loading={gainerTokens.loading}
+          error={gainerTokens.error}
+          onPromote={handlePromote}
+        />
+
+      </div>
+    </div>
+  );
+}
+
 // ─── Tiers ────────────────────────────────────────────────────────────────────
 function TiersPage({ setView }) {
   const [selected, setSelected] = useState(null);
@@ -1644,6 +1926,7 @@ function AppInner() {
       {view === "home" && (
         <>
           <Hero setView={setView} onConnectClick={onConnectClick} />
+          <TokenSections setView={setView} />
           <TiersPage setView={setView} />
         </>
       )}
