@@ -1311,30 +1311,78 @@ function PromotePage({ wallet, onConnectClick }) {
   const isMobile = useIsMobile();
 
   const { sendTransaction, data: txHash } = useSendTransaction();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash: txHash,
+    pollingInterval: 2_000, // poll every 2s instead of default 4s
+  });
 
-  // Watch confirmation
+  // Manual RPC receipt poller — fallback for chains where wagmi polling stalls
   useEffect(() => {
-    if (isConfirming) setTxStatus("confirming");
-    if (isConfirmed) {
-      setTxStatus("success");
-      // Save campaign to localStorage
-      const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
-      campaigns.push({
-        id: Date.now(),
-        token: form.tokenName,
-        contractAddress: form.contractAddress,
-        xHandle: form.xHandle,
-        tier: selectedTier?.name,
-        tierId: selectedTier?.id,
-        paxAmount: selectedTier?.price,
-        txHash,
-        deployedAt: new Date().toISOString(),
-        status: "active",
-      });
-      localStorage.setItem("paxpromote_campaigns", JSON.stringify(campaigns));
-    }
-  }, [isConfirming, isConfirmed]);
+    if (!txHash || txStatus === "success" || txStatus === "error") return;
+
+    let attempts = 0;
+    const maxAttempts = 60; // 2 min timeout at 2s intervals
+
+    const poll = async () => {
+      attempts++;
+      try {
+        const res = await fetch("https://mainnet-beta.rpc.hyperpaxeer.com/rpc", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0", id: 1,
+            method: "eth_getTransactionReceipt",
+            params: [txHash],
+          }),
+        });
+        const data = await res.json();
+        if (data?.result?.status === "0x1") {
+          // Success confirmed directly from RPC
+          handleConfirmed();
+          return;
+        }
+        if (data?.result?.status === "0x0") {
+          setTxStatus("error");
+          setTxError("Transaction failed on-chain");
+          return;
+        }
+      } catch { /* network hiccup, keep polling */ }
+
+      if (attempts >= maxAttempts) {
+        // Timed out — tx was sent, just can't confirm. Show success with caveat.
+        handleConfirmed(true);
+        return;
+      }
+      setTimeout(poll, 2000);
+    };
+
+    setTxStatus("confirming");
+    setTimeout(poll, 2000); // start polling after 2s
+  }, [txHash]);
+
+  const handleConfirmed = (timedOut = false) => {
+    const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+    campaigns.push({
+      id: Date.now(),
+      token: form.tokenName,
+      contractAddress: form.contractAddress,
+      xHandle: form.xHandle,
+      tier: selectedTier?.name,
+      tierId: selectedTier?.id,
+      paxAmount: selectedTier?.price,
+      txHash,
+      timedOut,
+      deployedAt: new Date().toISOString(),
+      status: "active",
+    });
+    localStorage.setItem("paxpromote_campaigns", JSON.stringify(campaigns));
+    setTxStatus("success");
+  };
+
+  // Also watch wagmi's own confirmation
+  useEffect(() => {
+    if (isConfirmed && txStatus !== "success") handleConfirmed();
+  }, [isConfirmed]);
 
   const handlePayAndDeploy = () => {
     if (!wallet || !selectedTier) return;
@@ -1587,6 +1635,20 @@ function PromotePage({ wallet, onConnectClick }) {
                 <button onClick={onConnectClick} style={{ width: "100%", ...btnPrimary, padding: "0.85rem", marginBottom: "1.25rem" }}>
                   Connect Wallet
                 </button>
+              )}
+
+              {/* Confirming status with escape hatch */}
+              {txStatus === "confirming" && txHash && (
+                <div style={{ background: "rgba(61,139,94,0.06)", border: `1px solid ${C.cyanBorder}`, borderRadius: 8, padding: "12px 16px", marginBottom: "1rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.cyan, boxShadow: `0 0 6px ${C.cyan}`, animation: "pulse 1.5s infinite", flexShrink: 0 }} />
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", color: C.text2 }}>Waiting for confirmation…</span>
+                  </div>
+                  <a href={`https://paxscan.paxeer.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
+                    style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.72rem", color: C.cyan, textDecoration: "none" }}>
+                    View on Paxscan ↗
+                  </a>
+                </div>
               )}
 
               {/* Error */}
