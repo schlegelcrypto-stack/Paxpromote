@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { defaultWagmiConfig } from "@web3modal/wagmi/react/config";
 import { WagmiProvider, useAccount, useDisconnect, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
@@ -450,41 +450,107 @@ function Navbar({ view, setView, wallet, profile, onConnectClick, onDisconnect }
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 function Hero({ setView, onConnectClick }) {
-  const [count, setCount] = useState(0);
   const [paxPrice, setPaxPrice] = useState(null);
   const isMobile = useIsMobile();
 
-  useEffect(() => {
-    const timer = setInterval(() => setCount(c => c < 12847 ? c + Math.floor(Math.random() * 150) : 12847), 30);
-    return () => clearInterval(timer);
+  // Live stats from localStorage campaigns
+  const liveStats = useMemo(() => {
+    try {
+      const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+      const totalPax   = campaigns.reduce((sum, c) => sum + parseFloat((c.paxAmount || "0").replace(/,/g, "")), 0);
+      const uniqueTokens = new Set(campaigns.map(c => (c.contractAddress || c.token || "").toLowerCase()).filter(Boolean));
+      return {
+        tokensPromoted: uniqueTokens.size,
+        paxDistributed: totalPax,
+      };
+    } catch { return { tokensPromoted: 0, paxDistributed: 0 }; }
   }, []);
 
+  // PAX price — try GraphQL spotPrice for a known PAX pair, then fallbacks
   useEffect(() => {
-    fetch("/sidiora-api/api/native/price")
-      .then(r => r.json())
-      .then(data => {
+    const tryGraphQL = async () => {
+      try {
+        const res = await fetch("/hg/graphql", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: `{ markets(first: 50, orderBy: volumeUSID, orderDirection: desc) { name symbol spotPrice } }`,
+          }),
+        });
+        const json = await res.json();
+        const markets = json?.data?.markets || [];
+        // Find a PAX-paired market with a real spotPrice
+        const paxMarket = markets.find(m =>
+          m.symbol?.toUpperCase() === "WPAX" ||
+          m.symbol?.toUpperCase() === "PAX" ||
+          m.name?.toUpperCase().includes("WPAX")
+        );
+        if (paxMarket?.spotPrice && parseFloat(paxMarket.spotPrice) > 0) {
+          setPaxPrice(parseFloat(paxMarket.spotPrice).toFixed(6));
+          return true;
+        }
+        // Otherwise grab the first valid spotPrice as a reference
+        const anyMarket = markets.find(m => parseFloat(m.spotPrice) > 0);
+        if (anyMarket) {
+          setPaxPrice(parseFloat(anyMarket.spotPrice).toFixed(6));
+          return true;
+        }
+      } catch {}
+      return false;
+    };
+
+    const tryNativeAPI = async () => {
+      try {
+        const res = await fetch("/sidiora-api/api/native/price");
+        const data = await res.json();
         const price = data?.price ?? data?.usd ?? data?.value ?? data?.data?.price ?? null;
-        if (price != null) setPaxPrice(parseFloat(price).toFixed(4));
-      })
-      .catch(() => {
-        // fallback: try pricefeed for PAX native price
-        fetch("/pricefeed/tokens")
-          .then(r => r.json())
-          .then(data => {
-            const list = Array.isArray(data) ? data : [];
-            const pax = list.find(t => t.symbol?.toUpperCase() === "PAX" || t.symbol?.toUpperCase() === "WPAX");
-            if (pax?.price_usd) setPaxPrice(parseFloat(pax.price_usd).toFixed(4));
-          })
-          .catch(() => {});
-      });
+        if (price != null && parseFloat(price) > 0) {
+          setPaxPrice(parseFloat(price).toFixed(6));
+          return true;
+        }
+      } catch {}
+      return false;
+    };
+
+    const tryPriceFeed = async () => {
+      try {
+        const res = await fetch("/pricefeed/tokens");
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        const pax = list.find(t => t.symbol?.toUpperCase() === "PAX" || t.symbol?.toUpperCase() === "WPAX");
+        if (pax?.price_usd && parseFloat(pax.price_usd) > 0) {
+          setPaxPrice(parseFloat(pax.price_usd).toFixed(6));
+          return true;
+        }
+      } catch {}
+      return false;
+    };
+
+    // Try all sources in parallel, first to succeed wins
+    (async () => {
+      const results = await Promise.allSettled([tryGraphQL(), tryNativeAPI(), tryPriceFeed()]);
+      // Already set via setPaxPrice in whichever resolved first
+    })();
+
+    // Refresh every 30s
+    const interval = setInterval(async () => {
+      await tryNativeAPI() || await tryGraphQL() || await tryPriceFeed();
+    }, 30_000);
+    return () => clearInterval(interval);
   }, []);
+
+  const fmtPax = (n) => {
+    if (!n) return "0";
+    if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`;
+    if (n >= 1_000)     return `${(n/1_000).toFixed(1)}K`;
+    return n.toString();
+  };
 
   return (
     <section style={{
       minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
       position: "relative", overflow: "hidden", paddingTop: 64,
     }}>
-      {/* Clean backdrop — subtle top glow + secondary accent */}
       <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 55% at 50% -5%, rgba(61,139,94,0.08) 0%, transparent 70%)", pointerEvents: "none" }} />
       <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 50% 40% at 75% 70%, rgba(61,139,94,0.03) 0%, transparent 60%)", pointerEvents: "none" }} />
 
@@ -499,7 +565,7 @@ function Hero({ setView, onConnectClick }) {
           letterSpacing: "0.1em", color: C.cyan,
         }}>
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, animation: "pulse 2s infinite", flexShrink: 0 }} />
-          {isMobile ? `${count.toLocaleString()} PAX DISTRIBUTED` : `RAID FORCE ACTIVE · ${count.toLocaleString()} PAX DISTRIBUTED`}
+          {isMobile ? `${liveStats.tokensPromoted} TOKENS PROMOTED` : `RAID NETWORK LIVE · ${liveStats.tokensPromoted} TOKEN${liveStats.tokensPromoted !== 1 ? "S" : ""} PROMOTED`}
         </div>
 
         <h1 style={{
@@ -531,18 +597,22 @@ function Hero({ setView, onConnectClick }) {
           </button>
         </div>
 
-        {/* Stats bar */}
+        {/* Live Stats bar */}
         <div style={{
           display: "grid",
           gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, auto)",
           gap: isMobile ? "1.5rem" : "3rem",
           justifyContent: isMobile ? "stretch" : "center",
-          marginTop: isMobile ? "3rem" : "5rem",
           borderTop: `1px solid ${C.border}`, paddingTop: "2rem",
           maxWidth: isMobile ? 340 : "none",
           margin: `${isMobile ? "3rem" : "5rem"} auto 0`,
         }}>
-          {[["2,847","Active Raiders"],["$4.2M","PAX Distributed"],["847","Tokens Promoted"],[paxPrice ? `$${paxPrice}` : "—","PAX Price"]].map(([num, label]) => (
+          {[
+            { num: liveStats.tokensPromoted.toString(),             label: "Tokens Promoted" },
+            { num: liveStats.paxDistributed > 0 ? fmtPax(liveStats.paxDistributed) + " PAX" : "0 PAX", label: "PAX Deployed" },
+            { num: liveStats.tokensPromoted > 0 ? (liveStats.tokensPromoted * 5).toString() : "0", label: "Active Raiders" },
+            { num: paxPrice ? `$${paxPrice}` : "…",                label: "PAX Price" },
+          ].map(({ num, label }) => (
             <div key={label} style={{ textAlign: "center" }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: isMobile ? "1.4rem" : "2rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{num}</div>
               <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.65rem", letterSpacing: "0.05em", color: C.text3, marginTop: 4, textTransform: "uppercase" }}>{label}</div>
@@ -782,26 +852,30 @@ const PROMOTED_TOKENS = [
 // Reads from: 1) real paid campaigns in localStorage, 2) mock promoted list
 // Returns a Set of lowercase contract addresses + a lookup fn
 function usePromotedTokens() {
-  const [promotedAddresses, setPromotedAddresses] = useState(() => buildPromotedSet());
+  const [promotedData, setPromotedData] = useState(() => buildPromotedData());
 
-  function buildPromotedSet() {
+  function buildPromotedData() {
     const set = new Set();
-    // Mock promoted (by ticker, lowercased)
-    PROMOTED_TOKENS.forEach(t => set.add(t.ticker?.toLowerCase()));
+    let realCampaigns = [];
+
     // Real paid campaigns from localStorage
     try {
-      const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
-      campaigns.forEach(c => {
+      realCampaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+      realCampaigns.forEach(c => {
         if (c.contractAddress) set.add(c.contractAddress.toLowerCase());
         if (c.token)           set.add(c.token.toLowerCase());
       });
     } catch {}
-    return set;
+
+    // Mock promoted only used for isPromoted tagging, NOT for the promoted section
+    PROMOTED_TOKENS.forEach(t => set.add(t.ticker?.toLowerCase()));
+
+    return { set, realCampaigns };
   }
 
-  // Re-read on focus (so if user paid in another tab it refreshes)
+  // Re-read on focus so new campaigns from other tabs appear
   useEffect(() => {
-    const refresh = () => setPromotedAddresses(buildPromotedSet());
+    const refresh = () => setPromotedData(buildPromotedData());
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, []);
@@ -809,16 +883,19 @@ function usePromotedTokens() {
   const isPromoted = (token) => {
     if (!token) return false;
     if (token.promoted === true) return true;
-    if (token.address && promotedAddresses.has(token.address.toLowerCase())) return true;
-    if (token.ticker  && promotedAddresses.has(token.ticker.toLowerCase()))  return true;
-    if (token.name    && promotedAddresses.has(token.name.toLowerCase()))    return true;
+    const { set } = promotedData;
+    if (token.address && set.has(token.address.toLowerCase())) return true;
+    if (token.ticker  && set.has(token.ticker.toLowerCase()))  return true;
+    if (token.name    && set.has(token.name.toLowerCase()))    return true;
     return false;
   };
 
-  // Also tag tokens in an array
   const tagTokens = (tokens) => tokens.map(t => ({ ...t, promoted: isPromoted(t) }));
 
-  return { isPromoted, tagTokens };
+  // Only real paid campaigns — no mock
+  const realCampaigns = promotedData.realCampaigns;
+
+  return { isPromoted, tagTokens, realCampaigns };
 }
 
 
@@ -905,10 +982,99 @@ function useMarkets(orderBy, orderDirection) {
   return { tokens, loading, error };
 }
 
-function TokenSections({ setView, onTokenClick }) {
+// ─── Promoted Section ─────────────────────────────────────────────────────────
+function PromotedSection({ onTokenClick, setView }) {
+  const isMobile = useIsMobile();
+  const { realCampaigns, isPromoted } = usePromotedTokens();
+  const allTokens = useMarkets("volumeUSID", "desc");
+  const { tagTokens } = usePromotedTokens();
+
+  // Only show if there are real paid campaigns
+  if (realCampaigns.length === 0) return null;
+
+  // Find tokens from GraphQL that match real campaigns
+  // Fall back to building a card from campaign data if not found in GraphQL
+  const promotedTokens = (() => {
+    const tagged = tagTokens(allTokens.tokens);
+    const fromGraphQL = tagged.filter(t => isPromoted(t));
+
+    // For any campaign not yet in GraphQL results, synthesize a card from campaign data
+    const graphQLNames = new Set(fromGraphQL.map(t => t.name?.toLowerCase()));
+    const graphQLAddrs = new Set(fromGraphQL.map(t => t.address?.toLowerCase()));
+
+    const synthetic = realCampaigns
+      .filter(c => {
+        const nameMatch = c.token && graphQLNames.has(c.token.toLowerCase());
+        const addrMatch = c.contractAddress && graphQLAddrs.has(c.contractAddress.toLowerCase());
+        return !nameMatch && !addrMatch;
+      })
+      .map(c => ({
+        name:    c.token || "Unknown Token",
+        ticker:  c.ticker || "—",
+        address: c.contractAddress || "",
+        price:   "—", mcap: "—", volume: "—", holders: "—", swaps: "—",
+        change:  0, emoji: "🚀", promoted: true,
+      }));
+
+    return [...fromGraphQL, ...synthetic];
+  })();
+
+  if (promotedTokens.length === 0 && allTokens.loading) return null;
+
+  return (
+    <div style={{ background: "#0a0a0b", paddingTop: "4rem", paddingBottom: "0" }}>
+      <div style={{ maxWidth: 1600, margin: "0 auto" }}>
+
+        {/* Header */}
+        <div style={{ padding: "0 2rem", marginBottom: "2rem", display: "flex", alignItems: "center", gap: 16 }}>
+          <div>
+            <div style={{ fontFamily: "'DM Mono', monospace", letterSpacing: "0.08em", color: C.cyan, fontSize: "0.65rem", marginBottom: "0.5rem", textTransform: "uppercase" }}>
+              Active Campaigns
+            </div>
+            <h2 style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "clamp(1.6rem, 4vw, 2.6rem)", letterSpacing: "-0.04em", margin: 0 }}>
+              🔥 <span style={{ color: C.cyan }}>PROMOTED</span> TOKENS
+            </h2>
+          </div>
+          {/* Live pulse */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(61,139,94,0.08)", border: "1px solid rgba(61,139,94,0.25)", borderRadius: 20, padding: "5px 12px", marginLeft: "auto" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, animation: "pulse 2s ease-in-out infinite", flexShrink: 0 }} />
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.65rem", color: C.cyan, letterSpacing: "0.06em" }}>LIVE</span>
+          </div>
+        </div>
+
+        {/* Cards */}
+        <div style={{
+          display: "flex", gap: 14, overflowX: "auto",
+          paddingLeft: "2rem", paddingRight: "2rem", paddingBottom: "2rem",
+          scrollbarWidth: "none",
+        }}>
+          {promotedTokens.map((token, i) => (
+            <div key={token.address || i} style={{ position: "relative", flexShrink: 0 }}>
+              {/* Green glow border wrapper */}
+              <div style={{
+                position: "absolute", inset: -1, borderRadius: 15,
+                background: "linear-gradient(135deg, rgba(61,139,94,0.6), rgba(61,139,94,0.2))",
+                zIndex: 0,
+              }} />
+              <div style={{ position: "relative", zIndex: 1 }}>
+                <TokenCard token={{ ...token, promoted: true }} onPromote={() => setView("promote")} onTokenClick={onTokenClick} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Divider */}
+        <div style={{ margin: "0 2rem", height: 1, background: `linear-gradient(90deg, transparent, rgba(61,139,94,0.3), transparent)` }} />
+      </div>
+    </div>
+  );
+}
+
+
   const newTokens    = useMarkets("createdAt",  "desc");
   const hotTokens    = useMarkets("volumeUSID", "desc");
   const gainerTokens = useMarkets("marketCap",  "desc");
+  const { tagTokens } = usePromotedTokens();
 
   const handlePromote = () => setView("promote");
 
@@ -929,7 +1095,7 @@ function TokenSections({ setView, onTokenClick }) {
           title="✨ New Tokens"
           badge="JUST LAUNCHED"
           badgeColor={C.green}
-          tokens={newTokens.tokens}
+          tokens={tagTokens(newTokens.tokens)}
           loading={newTokens.loading}
           error={newTokens.error}
           onPromote={handlePromote}
@@ -941,19 +1107,19 @@ function TokenSections({ setView, onTokenClick }) {
           title="🌶️ Hot Right Now"
           badge="TRENDING"
           badgeColor="#f59e0b"
-          tokens={hotTokens.tokens}
+          tokens={tagTokens(hotTokens.tokens)}
           loading={hotTokens.loading}
           error={hotTokens.error}
           onPromote={handlePromote}
           onTokenClick={onTokenClick}
         />
 
-        {/* Top Gainers */}
+        {/* Top by Market Cap */}
         <TokenRow
           title="📈 Top by Market Cap"
           badge="MARKET CAP"
           badgeColor={C.green}
-          tokens={gainerTokens.tokens}
+          tokens={tagTokens(gainerTokens.tokens)}
           loading={gainerTokens.loading}
           error={gainerTokens.error}
           onPromote={handlePromote}
@@ -1407,6 +1573,7 @@ function PromotePage({ wallet, onConnectClick }) {
     const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
     campaigns.push({
       id: Date.now(),
+      wallet: address,
       token: form.tokenName,
       contractAddress: form.contractAddress,
       xHandle: form.xHandle,
@@ -1736,6 +1903,22 @@ function DevDashboard({ wallet, onConnectClick, setView }) {
   const [tab, setTab] = useState("overview");
   const isMobile = useIsMobile();
 
+  // Load real campaigns from localStorage, keyed by wallet
+  const realCampaigns = useMemo(() => {
+    if (!wallet) return [];
+    try {
+      const all = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+      // Show campaigns from this wallet
+      return all.filter(c => !c.wallet || c.wallet?.toLowerCase() === wallet.toLowerCase())
+                .sort((a, b) => new Date(b.deployedAt) - new Date(a.deployedAt));
+    } catch { return []; }
+  }, [wallet]);
+
+  const hasRealCampaigns = realCampaigns.length > 0;
+  // Show mock only if user has no real campaigns yet
+  const campaigns = hasRealCampaigns ? realCampaigns : MOCK_CAMPAIGNS;
+  const isDemo    = !hasRealCampaigns;
+
   if (!wallet) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 72 }}>
       <div style={{ textAlign: "center", maxWidth: 420, padding: "0 2rem" }}>
@@ -1751,9 +1934,11 @@ function DevDashboard({ wallet, onConnectClick, setView }) {
     </div>
   );
 
-  const totalReach   = "3.55M";
-  const totalSpent   = "6,000";
-  const activeCampaigns = MOCK_CAMPAIGNS.filter(c => c.status === "active").length;
+  // Compute stats from real or mock data
+  const activeCampaigns = campaigns.filter(c => c.status === "active").length;
+  const totalPax = hasRealCampaigns
+    ? campaigns.reduce((sum, c) => sum + parseFloat((c.paxAmount || "0").replace(/,/g, "")), 0).toLocaleString()
+    : "6,000";
 
   return (
     <div style={{ minHeight: "100vh", paddingTop: isMobile ? 90 : 100, paddingBottom: 80 }}>
@@ -1777,13 +1962,27 @@ function DevDashboard({ wallet, onConnectClick, setView }) {
           </button>
         </div>
 
-        {/* Stats row — 2x2 on mobile, 4x1 on desktop */}
+        {/* Demo banner */}
+        {isDemo && (
+          <div style={{
+            background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)",
+            borderRadius: 8, padding: "10px 16px", marginBottom: "1.25rem",
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            <span style={{ fontSize: "1rem" }}>👀</span>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.82rem", color: "rgba(251,191,36,0.9)" }}>
+              Showing example campaigns — your real campaigns will appear here after your first deployment.
+            </span>
+          </div>
+        )}
+
+        {/* Stats row */}
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: isMobile ? 10 : 14, marginBottom: "1.5rem" }}>
           {[
-            { label: "Active Campaigns", value: activeCampaigns,  unit: "",      sub: `${MOCK_CAMPAIGNS.length} total`, color: C.cyan },
-            { label: "Total PAX Spent",  value: totalSpent,       unit: " PAX",  sub: "all campaigns", color: C.cyan },
-            { label: "Total Reach",      value: totalReach,       unit: "",      sub: "est. impressions", color: C.green },
-            { label: "Avg Engagement",   value: "4.8%",           unit: "",      sub: "+1.2% vs last mo", color: C.green },
+            { label: "Active Campaigns", value: activeCampaigns, unit: "",     sub: `${campaigns.length} total`,  color: C.cyan },
+            { label: "Total PAX Spent",  value: totalPax,        unit: " PAX", sub: "all campaigns",              color: C.cyan },
+            { label: "Total Reach",      value: isDemo ? "3.55M" : "—",        unit: "", sub: "est. impressions", color: C.green },
+            { label: "Avg Engagement",   value: isDemo ? "4.8%"  : "—",        unit: "", sub: isDemo ? "+1.2% vs last mo" : "pending data", color: C.green },
           ].map(({ label, value, unit, sub, color }) => (
             <div key={label} style={{
               background: "#111113", border: `1px solid ${C.border}`,
@@ -1814,70 +2013,87 @@ function DevDashboard({ wallet, onConnectClick, setView }) {
 
         {tab === "overview" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {MOCK_CAMPAIGNS.map(c => (
-              <div key={c.id} style={{
-                background: "#111113",
-                border: `1px solid ${c.status === "active" ? C.cyanBorder : C.border}`,
-                borderRadius: 8, padding: isMobile ? "16px" : "20px 24px",
-              }}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{
-                      width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-                      background: c.status === "active" ? C.cyanDim : "rgba(255,255,255,0.04)",
-                      border: `1px solid ${c.status === "active" ? C.cyanBorder : C.border}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "0.72rem", color: C.cyan,
-                    }}>{c.ticker.replace("$","")}</div>
-                    <div>
-                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1rem", letterSpacing: "-0.02em" }}>{c.token}</div>
-                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.7rem", color: C.text3, marginTop: 2 }}>{c.tier}</div>
-                    </div>
-                  </div>                  <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-                    {[
-                      { label: "Raiders", val: c.raiders },
-                      { label: "Est. Reach", val: c.reach },
-                      { label: "PAX Spent", val: c.spent },
-                      { label: "Price Δ", val: c.change, color: C.green },
-                    ].map(({ label, val, color }) => (
-                      <div key={label} style={{ textAlign: "right" }}>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "0.9rem", color: color || C.text }}>{val}</div>
-                        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.68rem", color: C.text3, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+            {campaigns.map((c, i) => {
+              // Normalize real vs mock campaign shape
+              const name     = c.token || c.tokenName || "Unknown Token";
+              const ticker   = c.ticker || (c.contractAddress ? `${c.contractAddress.slice(0,6)}…` : "—");
+              const tier     = c.tier || "—";
+              const status   = c.status || "active";
+              const pax      = c.spent || c.paxAmount || "—";
+              const progress = c.progress ?? (status === "active" ? 25 : 100);
+              const daysLeft = c.daysLeft ?? "—";
+              const txHash   = c.txHash;
+
+              return (
+                <div key={c.id || i} style={{
+                  background: "#111113",
+                  border: `1px solid ${status === "active" ? C.cyanBorder : C.border}`,
+                  borderRadius: 8, padding: isMobile ? "16px" : "20px 24px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                        background: status === "active" ? C.cyanDim : "rgba(255,255,255,0.04)",
+                        border: `1px solid ${status === "active" ? C.cyanBorder : C.border}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "0.72rem", color: C.cyan,
+                      }}>{ticker.replace("$","").slice(0,5)}</div>
+                      <div>
+                        <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1rem", letterSpacing: "-0.02em" }}>{name}</div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.7rem", color: C.text3, marginTop: 2 }}>{tier}</div>
+                        {txHash && (
+                          <a href={`https://paxscan.paxeer.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
+                            style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.65rem", color: C.cyan, textDecoration: "none" }}>
+                            {txHash.slice(0,10)}… ↗
+                          </a>
+                        )}
                       </div>
-                    ))}
+                    </div>
 
-                    <div style={{
-                      fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "0.08em",
-                      padding: "4px 10px", borderRadius: 20,
-                      background: c.status === "active" ? "rgba(0,240,160,0.1)" : "rgba(255,255,255,0.05)",
-                      color: c.status === "active" ? C.green : C.text3,
-                      border: `1px solid ${c.status === "active" ? "rgba(0,240,160,0.25)" : C.border}`,
-                    }}>
-                      {c.status === "active" ? `● ACTIVE · ${c.daysLeft}d left` : "✓ COMPLETED"}
+                    <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+                      {[
+                        { label: "PAX Spent", val: pax },
+                        { label: "Deployed",  val: c.deployedAt ? new Date(c.deployedAt).toLocaleDateString() : "—" },
+                      ].map(({ label, val }) => (
+                        <div key={label} style={{ textAlign: "right" }}>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "0.9rem", color: C.text }}>{val}</div>
+                          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.68rem", color: C.text3, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+                        </div>
+                      ))}
+                      <div style={{
+                        fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "0.08em",
+                        padding: "4px 10px", borderRadius: 20,
+                        background: status === "active" ? "rgba(0,240,160,0.1)" : "rgba(255,255,255,0.05)",
+                        color: status === "active" ? C.green : C.text3,
+                        border: `1px solid ${status === "active" ? "rgba(0,240,160,0.25)" : C.border}`,
+                      }}>
+                        {status === "active" ? `● ACTIVE${daysLeft !== "—" ? ` · ${daysLeft}d left` : ""}` : "✓ COMPLETED"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.7rem", color: C.text3 }}>Campaign progress</span>
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.7rem", color: C.cyan }}>{progress}%</span>
+                    </div>
+                    <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%", width: `${progress}%`,
+                        background: progress === 100
+                          ? `linear-gradient(90deg, ${C.green}, #22c55e)`
+                          : `linear-gradient(90deg, ${C.cyan}, #2d6e4a)`,
+                        borderRadius: 99,
+                        boxShadow: progress < 100 ? `0 0 8px ${C.cyanGlow}` : "none",
+                        transition: "width 0.6s ease",
+                      }} />
                     </div>
                   </div>
                 </div>
-
-                {/* Progress bar */}
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.7rem", color: C.text3 }}>Campaign progress</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.7rem", color: C.cyan }}>{c.progress}%</span>
-                  </div>
-                  <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%", width: `${c.progress}%`,
-                      background: c.progress === 100
-                        ? `linear-gradient(90deg, ${C.green}, #22c55e)`
-                        : `linear-gradient(90deg, ${C.cyan}, #2d6e4a)`,
-                      borderRadius: 99,
-                      boxShadow: c.progress < 100 ? `0 0 8px ${C.cyanGlow}` : "none",
-                      transition: "width 0.6s ease",
-                    }} />
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -2202,14 +2418,29 @@ function ProfileSetupModal({ wallet, onSave, onSkip }) {
 }
 
 // ─── Profile Page ─────────────────────────────────────────────────────────────
-function ProfilePage({ wallet, profile, onSaveProfile, onConnectClick }) {
+function ProfilePage({ wallet, profile, onSaveProfile, onConnectClick, setView }) {
   const isMobile = useIsMobile();
-  const [editing, setEditing]     = useState(false);
-  const [username, setUsername]   = useState(profile?.username || "");
-  const [xHandle, setXHandle]     = useState(profile?.xHandle || "");
+  const [editing, setEditing]         = useState(false);
+  const [username, setUsername]       = useState(profile?.username || "");
+  const [xHandle, setXHandle]         = useState(profile?.xHandle || "");
   const [avatarPreview, setAvatarPreview] = useState(profile?.avatar || null);
-  const [newAvatar, setNewAvatar] = useState(null);
-  const [saved, setSaved]         = useState(false);
+  const [newAvatar, setNewAvatar]     = useState(null);
+  const [saved, setSaved]             = useState(false);
+
+  // Load real campaigns live from localStorage
+  const campaigns = useMemo(() => {
+    if (!wallet) return [];
+    try {
+      const all = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+      return all
+        .filter(c => !c.wallet || c.wallet?.toLowerCase() === wallet.toLowerCase())
+        .sort((a, b) => new Date(b.deployedAt) - new Date(a.deployedAt));
+    } catch { return []; }
+  }, [wallet]);
+
+  const activeCampaigns  = campaigns.filter(c => c.status === "active");
+  const endedCampaigns   = campaigns.filter(c => c.status !== "active");
+  const totalPax         = campaigns.reduce((sum, c) => sum + parseFloat((c.paxAmount || "0").replace(/,/g, "")), 0);
 
   if (!wallet) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 72 }}>
@@ -2241,15 +2472,77 @@ function ProfilePage({ wallet, profile, onSaveProfile, onConnectClick }) {
     setTimeout(() => setSaved(false), 2500);
   };
 
+  const CampaignCard = ({ c }) => {
+    const name   = c.token || c.tokenName || "Unknown Token";
+    const ticker = c.ticker || (c.contractAddress ? `${c.contractAddress.slice(0,6)}…` : "—");
+    const status = c.status || "active";
+    const pax    = c.paxAmount || c.spent || "—";
+    const isActive = status === "active";
+
+    return (
+      <div style={{
+        background: "#111113",
+        border: `1px solid ${isActive ? "rgba(61,139,94,0.4)" : C.border}`,
+        borderRadius: 10,
+        padding: "1rem 1.25rem",
+        display: "flex", alignItems: "center", gap: 14,
+        boxShadow: isActive ? "0 0 14px rgba(61,139,94,0.07)" : "none",
+      }}>
+        {/* Token avatar */}
+        <div style={{
+          width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+          background: isActive ? "rgba(61,139,94,0.12)" : "rgba(255,255,255,0.04)",
+          border: `1px solid ${isActive ? "rgba(61,139,94,0.35)" : C.border}`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "0.68rem", color: C.cyan,
+        }}>{ticker.replace("$","").slice(0,5)}</div>
+
+        {/* Details */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.95rem", color: C.text }}>{name}</span>
+            <span style={{
+              fontFamily: "'DM Sans', sans-serif", fontSize: "0.65rem", fontWeight: 700,
+              padding: "2px 8px", borderRadius: 20,
+              background: isActive ? "rgba(0,240,160,0.1)" : "rgba(255,255,255,0.05)",
+              color: isActive ? C.green : C.text3,
+              border: `1px solid ${isActive ? "rgba(0,240,160,0.25)" : C.border}`,
+            }}>{isActive ? "● ACTIVE" : "✓ ENDED"}</span>
+          </div>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.7rem", color: C.text3 }}>{c.tier || "—"}</span>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.7rem", color: C.cyan }}>{pax} PAX</span>
+            {c.deployedAt && (
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.7rem", color: C.text3 }}>
+                {new Date(c.deployedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Tx link */}
+        {c.txHash && (
+          <a href={`https://paxscan.paxeer.app/tx/${c.txHash}`} target="_blank" rel="noopener noreferrer"
+            style={{
+              background: C.cyanDim, border: `1px solid ${C.cyanBorder}`,
+              borderRadius: 6, padding: "5px 10px", flexShrink: 0,
+              fontFamily: "'DM Mono', monospace", fontSize: "0.65rem", color: C.cyan,
+              textDecoration: "none", whiteSpace: "nowrap",
+            }}>Tx ↗</a>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={{ minHeight: "100vh", paddingTop: isMobile ? 90 : 100, paddingBottom: 80 }}>
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: isMobile ? "0 1.2rem" : "0 2rem" }}>
+      <div style={{ maxWidth: 680, margin: "0 auto", padding: isMobile ? "0 1.2rem" : "0 2rem" }}>
 
-        {/* Profile card */}
+        {/* ── Profile card ── */}
         <div style={{
           background: `linear-gradient(135deg, rgba(61,139,94,0.08), rgba(5,5,5,0.95))`,
           border: `1px solid ${C.cyanBorder}`, borderRadius: 14,
-          padding: "2.5rem", marginBottom: 24, textAlign: "center",
+          padding: "2.5rem", marginBottom: 20, textAlign: "center",
         }}>
           {/* Avatar */}
           <div style={{ position: "relative", display: "inline-block", marginBottom: 20 }}>
@@ -2270,8 +2563,7 @@ function ProfilePage({ wallet, profile, onSaveProfile, onConnectClick }) {
                 position: "absolute", bottom: 0, right: 0,
                 width: 30, height: 30, borderRadius: "50%",
                 background: C.cyan, display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", fontSize: "0.75rem",
-                boxShadow: `0 0 10px ${C.cyanGlow}`,
+                cursor: "pointer", fontSize: "0.75rem", boxShadow: `0 0 10px ${C.cyanGlow}`,
               }}>
                 ✏️
                 <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: "none" }} />
@@ -2322,31 +2614,73 @@ function ProfilePage({ wallet, profile, onSaveProfile, onConnectClick }) {
                 <button onClick={() => { setEditing(false); setUsername(profile?.username || ""); setXHandle(profile?.xHandle || ""); setAvatarPreview(profile?.avatar || null); }}
                   style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text2, padding: "0.75rem", fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.82rem", cursor: "pointer", borderRadius: 6 }}>CANCEL</button>
                 <button onClick={handleSave}
-                  style={{ flex: 2, ...btnPrimary, padding: "0.75rem",  }}>SAVE CHANGES</button>
+                  style={{ flex: 2, ...btnPrimary, padding: "0.75rem" }}>SAVE CHANGES</button>
               </div>
             </div>
           )}
-
           {saved && (
-            <div style={{ marginTop: 16, color: C.green, fontFamily: "'DM Sans', sans-serif", fontSize: "0.85rem", fontWeight: 600 }}>
-              ✓ Profile saved!
-            </div>
+            <div style={{ marginTop: 16, color: C.green, fontFamily: "'DM Sans', sans-serif", fontSize: "0.85rem", fontWeight: 600 }}>✓ Profile saved!</div>
           )}
         </div>
 
-        {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        {/* ── Live Stats ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 28 }}>
           {[
-            { label: "Campaigns Launched", value: "0" },
-            { label: "Raids Completed", value: "0" },
-            { label: "PAX Earned", value: "0" },
-          ].map(({ label, value }) => (
+            { label: "Campaigns Launched", value: campaigns.length, color: C.cyan },
+            { label: "Active Now",          value: activeCampaigns.length, color: activeCampaigns.length > 0 ? C.green : C.text3 },
+            { label: "PAX Spent",           value: totalPax > 0 ? totalPax.toLocaleString() : "0", color: C.cyan },
+          ].map(({ label, value, color }) => (
             <div key={label} style={{ background: "#111113", border: `1px solid ${C.border}`, borderRadius: 10, padding: "18px 16px", textAlign: "center" }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.6rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{value}</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.6rem", fontWeight: 700, color, letterSpacing: "-0.04em" }}>{value}</div>
               <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.7rem", color: C.text3, marginTop: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
             </div>
           ))}
         </div>
+
+        {/* ── Active Campaigns ── */}
+        {activeCampaigns.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0, animation: "pulse 2s ease-in-out infinite" }} />
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1rem", letterSpacing: "-0.02em" }}>Active Campaigns</span>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.65rem", color: C.cyan, background: "rgba(61,139,94,0.12)", border: "1px solid rgba(61,139,94,0.25)", borderRadius: 20, padding: "2px 8px" }}>{activeCampaigns.length}</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {activeCampaigns.map((c, i) => <CampaignCard key={c.id || i} c={c} />)}
+            </div>
+          </div>
+        )}
+
+        {/* ── Ended Campaigns ── */}
+        {endedCampaigns.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1rem", letterSpacing: "-0.02em", color: C.text2 }}>Ended Campaigns</span>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.65rem", color: C.text3, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 20, padding: "2px 8px" }}>{endedCampaigns.length}</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {endedCampaigns.map((c, i) => <CampaignCard key={c.id || i} c={c} />)}
+            </div>
+          </div>
+        )}
+
+        {/* ── Empty state ── */}
+        {campaigns.length === 0 && (
+          <div style={{
+            background: "rgba(61,139,94,0.04)", border: `1px solid rgba(61,139,94,0.15)`,
+            borderRadius: 12, padding: "2.5rem", textAlign: "center",
+          }}>
+            <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>🚀</div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "1rem", color: C.text, marginBottom: 8 }}>No campaigns yet</div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.82rem", color: C.text3, marginBottom: 20 }}>
+              Launch your first raid campaign to start promoting your token
+            </div>
+            <button onClick={() => setView("promote")} style={{ ...btnPrimary, padding: "0.7rem 2rem" }}>
+              Launch Campaign
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -2827,6 +3161,7 @@ function AppInner() {
       {view === "home" && (
         <>
           <Hero setView={setView} onConnectClick={onConnectClick} />
+          <PromotedSection onTokenClick={openToken} setView={setView} />
           <TokenSections setView={setView} onTokenClick={openToken} />
           <TiersPage setView={setView} />
           <Footer />
@@ -2837,7 +3172,7 @@ function AppInner() {
       {view === "dev"         && <><DevDashboard wallet={wallet} onConnectClick={onConnectClick} setView={setView} /><Footer /></>}
       {view === "raider"      && <><RaiderDashboard wallet={wallet} onConnectClick={onConnectClick} /><Footer /></>}
       {view === "promote"     && <><PromotePage wallet={wallet} onConnectClick={onConnectClick} /><Footer /></>}
-      {view === "profile"     && <><ProfilePage wallet={wallet} profile={profile} onSaveProfile={handleSaveProfile} onConnectClick={onConnectClick} /><Footer /></>}
+      {view === "profile"     && <><ProfilePage wallet={wallet} profile={profile} onSaveProfile={handleSaveProfile} onConnectClick={onConnectClick} setView={setView} /><Footer /></>}
     </>
   );
 }
