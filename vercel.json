@@ -11,6 +11,10 @@
     {
       "source": "/pricefeed/:path*",
       "destination": "https://swap.sidiora.exchange/pricefeed/:path*"
+    },
+    {
+      "source": "/hg/graphql",
+      "destination": "https://swap.sidiora.xyz/hg/graphql"
     }
   ]
 }

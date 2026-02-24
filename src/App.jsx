@@ -543,77 +543,117 @@ function Hero({ setView, onConnectClick }) {
 }
 
 // ─── Token Card ───────────────────────────────────────────────────────────────
+function TokenAvatar({ token, size = 48 }) {
+  const [imgError, setImgError] = useState(false);
+  // Generate a consistent color from token name for fallback
+  const colors = ["#3d8b5e","#3b82f6","#a78bfa","#f59e0b","#ef4444","#06b6d4","#ec4899"];
+  const colorIdx = (token.name || "").charCodeAt(0) % colors.length;
+  const initials  = (token.name || "?").slice(0, 2).toUpperCase();
+
+  if (token.image && !imgError) {
+    return (
+      <img
+        src={token.image}
+        alt={token.name}
+        onError={() => setImgError(true)}
+        style={{ width: size, height: size, borderRadius: 10, objectFit: "cover", flexShrink: 0 }}
+      />
+    );
+  }
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: 10, flexShrink: 0,
+      background: colors[colorIdx],
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "'DM Sans', sans-serif", fontWeight: 700,
+      fontSize: size * 0.35, color: "#fff",
+    }}>{initials}</div>
+  );
+}
+
 function TokenCard({ token, onPromote }) {
   const [hovered, setHovered] = useState(false);
   const isUp = token.change >= 0;
+  const changeColor = isUp ? C.green : C.red;
+  const changeBg    = isUp ? "rgba(74,222,128,0.12)" : "rgba(239,68,68,0.12)";
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        minWidth: 200, maxWidth: 200,
-        background: hovered ? "rgba(61,139,94,0.05)" : "#111113",
-        border: `1px solid ${hovered ? C.cyanBorder : C.border}`,
-        borderRadius: 10, padding: "16px",
+        minWidth: 260, maxWidth: 260,
+        background: hovered ? "rgba(255,255,255,0.03)" : "#111113",
+        border: `1px solid ${hovered ? "rgba(255,255,255,0.12)" : C.border}`,
+        borderRadius: 14, padding: "16px",
         cursor: "pointer", flexShrink: 0,
-        transition: "all 0.2s",
-        transform: hovered ? "translateY(-4px)" : "translateY(0)",
-        boxShadow: hovered ? `0 8px 24px rgba(0,0,0,0.4), 0 0 16px ${C.cyanGlow}` : "none",
-        position: "relative", overflow: "hidden",
+        transition: "border-color 0.15s, background 0.15s",
+        display: "flex", flexDirection: "column", gap: 12,
       }}>
 
-      {/* Token image / logo */}
+      {/* Top row: avatar + name/ticker/price/change */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <TokenAvatar token={token} size={48} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.95rem", color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{token.name}</span>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.text3, whiteSpace: "nowrap" }}>{token.ticker}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, fontSize: "1rem", color: C.text }}>{token.price || "—"}</span>
+            <span style={{
+              fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.78rem",
+              color: changeColor, background: changeBg,
+              padding: "1px 7px", borderRadius: 20,
+            }}>{isUp ? "+" : ""}{token.change?.toFixed(2)}%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats row */}
       <div style={{
-        width: "100%", height: 120, borderRadius: 8,
-        background: token.image
-          ? "transparent"
-          : `linear-gradient(135deg, ${token.color || "rgba(249,115,22,0.15)"}, rgba(5,5,5,0.8))`,
-        marginBottom: 12, overflow: "hidden",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        border: `1px solid ${C.border}`,
+        display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+        gap: 6,
       }}>
-        {token.image
-          ? <img src={token.image} alt={token.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          : <span style={{ fontSize: "3rem" }}>{token.emoji || "🪙"}</span>
-        }
-      </div>
-
-      {/* Name + ticker */}
-      <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.9rem", letterSpacing: "-0.01em", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {token.name}
-      </div>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.7rem", color: C.cyan, marginBottom: 10 }}>
-        {token.ticker}
-      </div>
-
-      {/* Price + change */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.78rem", color: C.text2 }}>
-          {token.price || "—"}
-        </div>
-        <div style={{
-          fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.72rem",
-          color: isUp ? C.green : "#ff4060",
-          background: isUp ? "rgba(0,240,160,0.1)" : "rgba(255,64,96,0.1)",
-          padding: "2px 7px", borderRadius: 20,
-        }}>
-          {isUp ? "+" : ""}{token.change?.toFixed(1)}%
-        </div>
-      </div>
-
-      {/* Promote button on hover */}
-      {hovered && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onPromote(token); }}
-          style={{
-            width: "100%", ...btnPrimary, padding: "0.5rem",
-            fontSize: "0.72rem", 
-            animation: "modalIn 0.15s ease",
+        {[
+          ["Market Cap", token.mcap || "—"],
+          ["Volume 24h", token.volume || "—"],
+          ["Holders",    token.holders || "—"],
+        ].map(([label, val]) => (
+          <div key={label} style={{
+            background: "#1a1a1e", borderRadius: 8, padding: "8px 10px",
           }}>
-          PROMOTE TOKEN
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.65rem", color: C.text3, marginBottom: 3 }}>{label}</div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.8rem", color: C.text }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer: active promotions link + promote button */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        <a
+          href={`https://paxpromote.io/?token=${token.address}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          style={{
+            fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem",
+            color: C.cyan, textDecoration: "none", display: "flex", alignItems: "center", gap: 4,
+          }}
+          onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
+          onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}
+        >
+          <span style={{ fontSize: "0.65rem" }}>⚡</span> Active Promotions
+        </a>
+        <button
+          onClick={e => { e.stopPropagation(); onPromote(token); }}
+          style={{
+            ...btnPrimary, padding: "5px 12px", fontSize: "0.72rem",
+            opacity: hovered ? 1 : 0.7, transition: "opacity 0.15s",
+          }}>
+          Promote
         </button>
-      )}
+      </div>
     </div>
   );
 }
@@ -676,10 +716,11 @@ function TokenRow({ title, badge, badgeColor, tokens, loading, error, onPromote 
         >
           {loading && Array.from({ length: 8 }).map((_, i) => (
             <div key={i} style={{
-              minWidth: 200, height: 220, borderRadius: 10,
-              background: "linear-gradient(90deg, #0c0c0e 25%, #111113 50%, #0c0c0e 75%)",
+              minWidth: 260, height: 200, borderRadius: 14,
+              background: "linear-gradient(90deg, #111113 25%, #1a1a1e 50%, #111113 75%)",
+              backgroundSize: "200% 100%",
               flexShrink: 0, border: `1px solid ${C.border}`,
-              animation: "pulse 1.5s ease infinite",
+              animation: "shimmer 1.5s infinite",
             }} />
           ))}
 
@@ -710,49 +751,94 @@ const PROMOTED_TOKENS = [
   { name: "PaxRocket",    ticker: "$PRKX",  change: 18.5, price: "0.00022 PAX", emoji: "🛸", color: "rgba(167,139,250,0.15)", promoted: true },
 ];
 
-// ─── Token Sections (fetches from Sidiora pricefeed) ─────────────────────────
-function useTokens(endpoint) {
-  const [tokens, setTokens] = useState([]);
+// ─── GraphQL token fetcher ────────────────────────────────────────────────────
+const MARKETS_QUERY = `
+  query FetchMarkets($orderBy: String!, $orderDirection: String!, $first: Int!, $skip: Int!) {
+    markets(
+      orderBy: $orderBy
+      orderDirection: $orderDirection
+      first: $first
+      skip: $skip
+    ) {
+      id
+      name
+      symbol
+      spotPrice
+      marketCap
+      volumeUSID
+      swapCount
+      holderCount
+      createdAt
+      token { id address }
+    }
+  }
+`;
+
+function fmtUSD(val) {
+  const n = parseFloat(val || 0);
+  if (!n) return "—";
+  if (n >= 1_000_000) return `$${(n/1_000_000).toFixed(2)}M`;
+  if (n >= 1_000)     return `$${(n/1_000).toFixed(1)}K`;
+  return `$${n.toFixed(2)}`;
+}
+
+function fmtPrice(val) {
+  const n = parseFloat(val || 0);
+  if (!n) return "—";
+  if (n < 0.000001) return `$${n.toExponential(2)}`;
+  if (n < 0.01)     return `$${n.toFixed(8)}`;
+  return `$${n.toFixed(4)}`;
+}
+
+async function fetchMarkets(orderBy, orderDirection, first = 20) {
+  const res = await fetch("/hg/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: MARKETS_QUERY,
+      variables: { orderBy, orderDirection, first, skip: 0 },
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if (json.errors) throw new Error(json.errors[0]?.message || "GraphQL error");
+  return (json.data?.markets || []).map(m => ({
+    name:    m.name   || "Unknown",
+    ticker:  m.symbol ? `$${m.symbol}` : "???",
+    price:   fmtPrice(m.spotPrice),
+    mcap:    fmtUSD(m.marketCap),
+    volume:  fmtUSD(m.volumeUSID),
+    holders: m.holderCount != null ? `${m.holderCount}` : "—",
+    swaps:   m.swapCount   != null ? `${m.swapCount}`   : "—",
+    address: m.token?.address || m.id,
+    change:  0,
+    emoji:   "🪙",
+    color:   "rgba(61,139,94,0.12)",
+    image:   null,
+    verified: false,
+  }));
+}
+
+function useMarkets(orderBy, orderDirection) {
+  const [tokens, setTokens]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
+  const [error, setError]     = useState(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(endpoint, { cache: "no-store" })
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then(data => {
-        const list = Array.isArray(data) ? data : data.data || data.tokens || data.markets || [];
-        const normalised = list.slice(0, 40).map(t => ({
-          name:    t.name    || "Unknown",
-          ticker:  t.symbol  ? `$${t.symbol}` : "???",
-          price:   t.price_usd != null ? `$${parseFloat(t.price_usd).toFixed(8)}` : "—",
-          change:  parseFloat(t.price_change_24h ?? 0),
-          volume:  t.volume_24h_usd ? `$${(parseFloat(t.volume_24h_usd)/1000).toFixed(1)}K` : null,
-          mcap:    t.market_cap_usd ? `$${(parseFloat(t.market_cap_usd)/1000).toFixed(1)}K` : null,
-          image:   t.logo_url || t.image || null,
-          address: t.address || t.id,
-          verified: t.verified || false,
-          emoji:   "🪙",
-          color:   "rgba(61,139,94,0.12)",
-        }));
-        setTokens(normalised);
-        setLoading(false);
-      })
-      .catch(err => { setError(err.message); setLoading(false); });
-  }, [endpoint]);
+    fetchMarkets(orderBy, orderDirection)
+      .then(data => { setTokens(data); setLoading(false); })
+      .catch(err  => { setError(err.message); setLoading(false); });
+  }, [orderBy, orderDirection]);
 
   return { tokens, loading, error };
 }
 
 function TokenSections({ setView }) {
-  // All tokens from pricefeed — we sort client-side for each row
-  const { tokens: allTokens, loading, error } = useTokens("/pricefeed/tokens");
-
-  // Sort variants
-  const newTokens    = { tokens: [...allTokens].slice(0, 20), loading, error };
-  const hotTokens    = { tokens: [...allTokens].sort((a, b) => (parseFloat(b.volume?.replace(/[$K]/g,"") || 0)) - (parseFloat(a.volume?.replace(/[$K]/g,"") || 0))).slice(0, 20), loading, error };
-  const gainerTokens = { tokens: [...allTokens].filter(t => t.change > 0).sort((a, b) => b.change - a.change).slice(0, 20), loading, error };
+  const newTokens    = useMarkets("createdAt",  "desc");
+  const hotTokens    = useMarkets("volumeUSID", "desc");
+  const gainerTokens = useMarkets("marketCap",  "desc");
 
   const handlePromote = () => setView("promote");
 
@@ -2178,6 +2264,7 @@ function AppInner() {
         html { scroll-behavior: smooth; overflow-x: hidden; }
         input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.2); }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         button:hover { filter: brightness(1.08); }
