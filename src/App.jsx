@@ -453,17 +453,26 @@ function Hero({ setView, onConnectClick }) {
   const [paxPrice, setPaxPrice] = useState(null);
   const isMobile = useIsMobile();
 
-  // Live stats from localStorage campaigns
-  const liveStats = useMemo(() => {
-    try {
-      const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
-      const totalPax   = campaigns.reduce((sum, c) => sum + parseFloat((c.paxAmount || "0").replace(/,/g, "")), 0);
-      const uniqueTokens = new Set(campaigns.map(c => (c.contractAddress || c.token || "").toLowerCase()).filter(Boolean));
-      return {
-        tokensPromoted: uniqueTokens.size,
-        paxDistributed: totalPax,
-      };
-    } catch { return { tokensPromoted: 0, paxDistributed: 0 }; }
+  // Live stats from API
+  const [liveStats, setLiveStats] = useState({ tokensPromoted: 0, totalPaxDeployed: 0, activeCampaigns: 0 });
+
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/campaigns/stats")
+        .then(r => r.json())
+        .then(data => { if (data?.tokensPromoted != null) setLiveStats(data); })
+        .catch(() => {
+          // Fallback to localStorage if API not yet deployed
+          try {
+            const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+            const uniqueTokens = new Set(campaigns.map(c => (c.contractAddress || c.token || "").toLowerCase()).filter(Boolean));
+            const totalPax = campaigns.reduce((sum, c) => sum + parseFloat((c.paxAmount || "0").replace(/,/g, "")), 0);
+            setLiveStats({ tokensPromoted: uniqueTokens.size, totalPaxDeployed: totalPax, activeCampaigns: campaigns.filter(c => c.status === "active").length });
+          } catch {}
+        });
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => clearInterval(interval);
   }, []);
 
   // PAX price — try GraphQL spotPrice for a known PAX pair, then fallbacks
@@ -608,10 +617,10 @@ function Hero({ setView, onConnectClick }) {
           margin: `${isMobile ? "3rem" : "5rem"} auto 0`,
         }}>
           {[
-            { num: liveStats.tokensPromoted.toString(),             label: "Tokens Promoted" },
-            { num: liveStats.paxDistributed > 0 ? fmtPax(liveStats.paxDistributed) + " PAX" : "0 PAX", label: "PAX Deployed" },
+            { num: liveStats.tokensPromoted.toString(),                                             label: "Tokens Promoted" },
+            { num: liveStats.totalPaxDeployed > 0 ? fmtPax(liveStats.totalPaxDeployed) + " PAX" : "0 PAX", label: "PAX Deployed" },
             { num: liveStats.tokensPromoted > 0 ? (liveStats.tokensPromoted * 5).toString() : "0", label: "Active Raiders" },
-            { num: paxPrice ? `$${paxPrice}` : "…",                label: "PAX Price" },
+            { num: paxPrice ? `$${paxPrice}` : "…",                                                label: "PAX Price" },
           ].map(({ num, label }) => (
             <div key={label} style={{ textAlign: "center" }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: isMobile ? "1.4rem" : "2rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{num}</div>
@@ -848,52 +857,70 @@ const PROMOTED_TOKENS = [
   { name: "PaxRocket",    ticker: "$PRKX",  change: 18.5, price: "0.00022 PAX", emoji: "🛸", color: "rgba(167,139,250,0.15)", promoted: true },
 ];
 
-// ─── Promoted token registry ─────────────────────────────────────────────────
-// Reads from: 1) real paid campaigns in localStorage, 2) mock promoted list
-// Returns a Set of lowercase contract addresses + a lookup fn
-function usePromotedTokens() {
-  const [promotedData, setPromotedData] = useState(() => buildPromotedData());
-
-  function buildPromotedData() {
-    const set = new Set();
-    let realCampaigns = [];
-
-    // Real paid campaigns from localStorage
+// ─── Shared campaigns hook — reads from API, falls back to localStorage ────────
+function useCampaigns(wallet) {
+  const [campaigns, setCampaigns] = useState(() => {
+    // Show localStorage instantly while API loads
     try {
-      realCampaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
-      realCampaigns.forEach(c => {
-        if (c.contractAddress) set.add(c.contractAddress.toLowerCase());
-        if (c.token)           set.add(c.token.toLowerCase());
-      });
-    } catch {}
+      const all = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+      if (wallet) return all.filter(c => !c.wallet || c.wallet?.toLowerCase() === wallet?.toLowerCase());
+      return all;
+    } catch { return []; }
+  });
 
-    // Mock promoted only used for isPromoted tagging, NOT for the promoted section
-    PROMOTED_TOKENS.forEach(t => set.add(t.ticker?.toLowerCase()));
-
-    return { set, realCampaigns };
-  }
-
-  // Re-read on focus so new campaigns from other tabs appear
   useEffect(() => {
-    const refresh = () => setPromotedData(buildPromotedData());
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
-  }, []);
+    const url = wallet ? `/api/campaigns?wallet=${wallet}` : "/api/campaigns";
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        if (data?.campaigns) {
+          // Merge API results into localStorage cache
+          try {
+            const existing = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+            const apiIds   = new Set(data.campaigns.map(c => c.id?.toString()));
+            const merged   = [
+              ...data.campaigns,
+              ...existing.filter(c => !apiIds.has(c.id?.toString())),
+            ].sort((a, b) => new Date(b.deployedAt) - new Date(a.deployedAt));
+            localStorage.setItem("paxpromote_campaigns", JSON.stringify(merged));
+            setCampaigns(data.campaigns);
+          } catch {
+            setCampaigns(data.campaigns);
+          }
+        }
+      })
+      .catch(() => {}); // keep localStorage data on error
+  }, [wallet]);
+
+  return campaigns;
+}
+
+
+// Reads from: API (Upstash) + localStorage cache + mock list for row highlights
+function usePromotedTokens() {
+  const realCampaigns = useCampaigns(null); // all campaigns, not wallet-filtered
+
+  const promotedSet = useMemo(() => {
+    const set = new Set();
+    realCampaigns.forEach(c => {
+      if (c.contractAddress) set.add(c.contractAddress.toLowerCase());
+      if (c.token)           set.add(c.token.toLowerCase());
+    });
+    // Mock list still highlights rows even before real campaigns exist
+    PROMOTED_TOKENS.forEach(t => set.add(t.ticker?.toLowerCase()));
+    return set;
+  }, [realCampaigns]);
 
   const isPromoted = (token) => {
     if (!token) return false;
     if (token.promoted === true) return true;
-    const { set } = promotedData;
-    if (token.address && set.has(token.address.toLowerCase())) return true;
-    if (token.ticker  && set.has(token.ticker.toLowerCase()))  return true;
-    if (token.name    && set.has(token.name.toLowerCase()))    return true;
+    if (token.address && promotedSet.has(token.address.toLowerCase())) return true;
+    if (token.ticker  && promotedSet.has(token.ticker.toLowerCase()))  return true;
+    if (token.name    && promotedSet.has(token.name.toLowerCase()))    return true;
     return false;
   };
 
   const tagTokens = (tokens) => tokens.map(t => ({ ...t, promoted: isPromoted(t) }));
-
-  // Only real paid campaigns — no mock
-  const realCampaigns = promotedData.realCampaigns;
 
   return { isPromoted, tagTokens, realCampaigns };
 }
@@ -1569,23 +1596,40 @@ function PromotePage({ wallet, onConnectClick }) {
     return () => { done = true; clearInterval(interval); clearTimeout(timeout); };
   }, [txHash]);
 
-  const handleConfirmed = (timedOut = false) => {
-    const campaigns = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
-    campaigns.push({
-      id: Date.now(),
-      wallet: address,
-      token: form.tokenName,
+  const handleConfirmed = async (timedOut = false) => {
+    const campaign = {
+      id:              Date.now(),
+      wallet:          address,
+      token:           form.tokenName,
       contractAddress: form.contractAddress,
-      xHandle: form.xHandle,
-      tier: selectedTier?.name,
-      tierId: selectedTier?.id,
-      paxAmount: selectedTier?.price,
+      xHandle:         form.xHandle,
+      tier:            selectedTier?.name,
+      tierId:          selectedTier?.id,
+      paxAmount:       selectedTier?.price,
       txHash,
       timedOut,
-      deployedAt: new Date().toISOString(),
-      status: "active",
-    });
-    localStorage.setItem("paxpromote_campaigns", JSON.stringify(campaigns));
+      deployedAt:      new Date().toISOString(),
+      status:          "active",
+    };
+
+    // 1. Save to Upstash (shared, visible to everyone)
+    try {
+      await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(campaign),
+      });
+    } catch (err) {
+      console.error("Failed to save campaign to API:", err);
+    }
+
+    // 2. Also cache locally so the user sees it instantly without waiting for a fetch
+    try {
+      const cached = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
+      cached.unshift(campaign);
+      localStorage.setItem("paxpromote_campaigns", JSON.stringify(cached));
+    } catch {}
+
     setTxStatus("success");
   };
 
@@ -1903,17 +1947,8 @@ function DevDashboard({ wallet, onConnectClick, setView }) {
   const [tab, setTab] = useState("overview");
   const isMobile = useIsMobile();
 
-  // Load real campaigns from localStorage, keyed by wallet
-  const realCampaigns = useMemo(() => {
-    if (!wallet) return [];
-    try {
-      const all = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
-      // Show campaigns from this wallet
-      return all.filter(c => !c.wallet || c.wallet?.toLowerCase() === wallet.toLowerCase())
-                .sort((a, b) => new Date(b.deployedAt) - new Date(a.deployedAt));
-    } catch { return []; }
-  }, [wallet]);
-
+  // Load real campaigns from API, wallet-filtered
+  const realCampaigns = useCampaigns(wallet);
   const hasRealCampaigns = realCampaigns.length > 0;
   // Show mock only if user has no real campaigns yet
   const campaigns = hasRealCampaigns ? realCampaigns : MOCK_CAMPAIGNS;
@@ -2427,16 +2462,8 @@ function ProfilePage({ wallet, profile, onSaveProfile, onConnectClick, setView }
   const [newAvatar, setNewAvatar]     = useState(null);
   const [saved, setSaved]             = useState(false);
 
-  // Load real campaigns live from localStorage
-  const campaigns = useMemo(() => {
-    if (!wallet) return [];
-    try {
-      const all = JSON.parse(localStorage.getItem("paxpromote_campaigns") || "[]");
-      return all
-        .filter(c => !c.wallet || c.wallet?.toLowerCase() === wallet.toLowerCase())
-        .sort((a, b) => new Date(b.deployedAt) - new Date(a.deployedAt));
-    } catch { return []; }
-  }, [wallet]);
+  // Load real campaigns live from API
+  const campaigns = useCampaigns(wallet);
 
   const activeCampaigns  = campaigns.filter(c => c.status === "active");
   const endedCampaigns   = campaigns.filter(c => c.status !== "active");
