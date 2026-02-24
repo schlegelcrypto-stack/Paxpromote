@@ -50,7 +50,7 @@ createWeb3Modal({
   chains,
   themeMode: "dark",
   themeVariables: {
-    "--w3m-accent": "#e8720c",
+    "--w3m-accent": "#3d8b5e",
     "--w3m-background-color": "#111113",
     "--w3m-border-radius-master": "4px",
     "--w3m-font-family": "DM Sans, sans-serif",
@@ -73,8 +73,8 @@ const TIERS = [
     name: "Make Some Noise",
     tagline: "Build momentum",
     price: "1,500",
-    color: "#e8720c",
-    glow: "rgba(232,114,12,0.3)",
+    color: "#3d8b5e",
+    glow: "rgba(61,139,94,0.3)",
     icon: "🔊",
     features: ["15 Raiders assigned", "72hr campaign", "Boosted X amplification", "Trending hashtag push", "Artwork promotion", "Detailed analytics"],
   },
@@ -83,8 +83,8 @@ const TIERS = [
     name: "In Your Face",
     tagline: "Dominate the feed",
     price: "4,000",
-    color: "#e8720c",
-    glow: "rgba(232,114,12,0.35)",
+    color: "#3d8b5e",
+    glow: "rgba(61,139,94,0.30)",
     icon: "🔥",
     featured: true,
     features: ["40 Raiders assigned", "7-day campaign", "Premium X raids", "Priority placement", "Community raids", "Meme & content package", "Live tracking dashboard"],
@@ -121,10 +121,10 @@ const MOCK_RAIDS = [
 
 // ─── Brand tokens ───────────────────────────────────────────────────────────
 const C = {
-  cyan:       "#e8720c",                   // --color-accent
-  cyanDim:    "rgba(232,114,12,0.15)",     // --color-accent-muted ish
-  cyanGlow:   "rgba(232,114,12,0.25)",
-  cyanBorder: "rgba(232,114,12,0.35)",
+  cyan:       "#3d8b5e",                   // --color-accent
+  cyanDim:    "rgba(61,139,94,0.15)",     // --color-accent-muted ish
+  cyanGlow:   "rgba(61,139,94,0.20)",
+  cyanBorder: "rgba(61,139,94,0.30)",
   bg:         "#0a0a0b",                   // --color-base
   bg2:        "#111113",                   // --color-surface
   bg3:        "#1a1a1e",                   // --color-surface-2
@@ -134,7 +134,7 @@ const C = {
   text:       "#f0f0f2",                   // --color-text-primary
   text2:      "#a0a0ab",                   // --color-text-secondary
   text3:      "#5a5a66",                   // --color-text-muted
-  green:      "#22c55e",                   // --color-success
+  green:      "#4ade80",                   // --color-success (bright lime, distinct from hunter green accent)
   red:        "#ef4444",                   // --color-danger
   yellow:     "#eab308",                   // --color-warning
   blue:       "#3b82f6",                   // --color-info
@@ -142,7 +142,7 @@ const C = {
 };
 
 const btnPrimary = {
-  background: "#e8720c",
+  background: "#3d8b5e",
   border: "none",
   color: "#ffffff",
   fontFamily: "'DM Sans', sans-serif",
@@ -155,9 +155,9 @@ const btnPrimary = {
 };
 
 const btnGhost = {
-  background: "rgba(232,114,12,0.10)",
-  border: "1px solid rgba(232,114,12,0.30)",
-  color: "#e8720c",
+  background: "rgba(61,139,94,0.10)",
+  border: "1px solid rgba(61,139,94,0.28)",
+  color: "#3d8b5e",
   fontFamily: "'DM Sans', sans-serif",
   fontWeight: 600,
   letterSpacing: "0.01em",
@@ -177,10 +177,11 @@ const labelStyle = {
 
 // ─── Navbar ──────────────────────────────────────────────────────────────────
 function Navbar({ view, setView, wallet, profile, onConnectClick, onDisconnect }) {
-  const [scrolled, setScrolled]     = useState(false);
-  const [dashOpen, setDashOpen]     = useState(false);
-  const [menuOpen, setMenuOpen]     = useState(false);
-  const dashRef  = useRef(null);
+  const [scrolled, setScrolled]   = useState(false);
+  const [dashOpen, setDashOpen]   = useState(false);
+  const [menuOpen, setMenuOpen]   = useState(false);
+  const [search, setSearch]       = useState("");
+  const dashRef = useRef(null);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -195,62 +196,64 @@ function Navbar({ view, setView, wallet, profile, onConnectClick, onDisconnect }
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Close mobile menu on view change
   useEffect(() => { setMenuOpen(false); setDashOpen(false); }, [view]);
 
   const isDashView = view === "raider" || view === "dev";
-  const navLinks = [["home","HOME"],["promote","PROMOTE"],["leaderboard","LEADERBOARD"]];
+  const navLinks = [["home","Home"],["promote","Promote"],["leaderboard","Leaderboard"]];
 
   return (
     <>
       <nav style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
-        background: scrolled || menuOpen ? "rgba(5,5,5,0.97)" : "transparent",
-        backdropFilter: scrolled || menuOpen ? "blur(20px)" : "none",
-        borderBottom: scrolled || menuOpen ? `1px solid ${C.cyanBorder}` : "none",
-        transition: "all 0.4s ease",
-        padding: isMobile ? "0 1.2rem" : "0 2rem",
+        background: scrolled || menuOpen ? "rgba(10,10,11,0.95)" : "rgba(10,10,11,0.8)",
+        backdropFilter: "blur(20px)",
+        borderBottom: `1px solid ${scrolled ? C.border : "transparent"}`,
+        transition: "all 0.3s ease",
+        padding: isMobile ? "0 1rem" : "0 1.5rem",
       }}>
-        <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 64 }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", alignItems: "center", height: 60, gap: isMobile ? 0 : 16 }}>
 
-          {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", cursor: "pointer", flexShrink: 0 }} onClick={() => setView("home")}>
-            <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: isMobile ? "1.2rem" : "1.45rem", letterSpacing: "-0.03em", color: C.text }}>PAX</span>
-            <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 300, fontSize: isMobile ? "1.2rem" : "1.45rem", letterSpacing: "-0.02em", color: C.text }}>promote</span>
-          </div>
+          {/* LEFT — Logo + Nav links */}
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 0 : 6, flexShrink: 0 }}>
+            {/* Logo */}
+            <div style={{ display: "flex", alignItems: "center", cursor: "pointer", marginRight: isMobile ? 0 : 12 }} onClick={() => setView("home")}>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: "1.25rem", letterSpacing: "-0.03em", color: C.text }}>PAX</span>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 300, fontSize: "1.25rem", letterSpacing: "-0.02em", color: C.text2 }}>promote</span>
+            </div>
 
-          {/* Desktop nav links */}
-          {!isMobile && (
-            <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-              {navLinks.map(([v, label]) => (
-                <button key={v} onClick={() => setView(v)} style={{
-                  background: "transparent", border: "1px solid transparent",
-                  color: view === v ? C.cyan : C.text2,
-                  padding: "0.4rem 1rem",
-                  fontFamily: "'DM Sans', sans-serif", fontWeight: 600, letterSpacing: "0.08em", fontSize: "0.75rem",
-                  cursor: "pointer", borderRadius: 12, transition: "all 0.2s",
-                }}>{label}</button>
-              ))}
+            {/* Desktop nav links */}
+            {!isMobile && navLinks.map(([v, label]) => (
+              <button key={v} onClick={() => setView(v)} style={{
+                background: view === v ? "rgba(255,255,255,0.06)" : "transparent",
+                border: "none",
+                color: view === v ? C.text : C.text2,
+                padding: "0.4rem 0.85rem",
+                fontFamily: "'DM Sans', sans-serif", fontWeight: 500, fontSize: "0.9rem",
+                cursor: "pointer", borderRadius: 8, transition: "all 0.15s",
+              }}>{label}</button>
+            ))}
 
-              {/* Dashboard dropdown */}
+            {/* Dashboard dropdown */}
+            {!isMobile && (
               <div ref={dashRef} style={{ position: "relative" }}>
                 <button onClick={() => setDashOpen(o => !o)} style={{
-                  background: "transparent", border: "1px solid transparent",
-                  color: isDashView ? C.cyan : C.text2,
-                  padding: "0.4rem 1rem",
-                  fontFamily: "'DM Sans', sans-serif", fontWeight: 600, letterSpacing: "0.08em", fontSize: "0.75rem",
-                  cursor: "pointer", borderRadius: 12, transition: "all 0.2s",
+                  background: isDashView ? "rgba(255,255,255,0.06)" : "transparent",
+                  border: "none",
+                  color: isDashView ? C.text : C.text2,
+                  padding: "0.4rem 0.85rem",
+                  fontFamily: "'DM Sans', sans-serif", fontWeight: 500, fontSize: "0.9rem",
+                  cursor: "pointer", borderRadius: 8, transition: "all 0.15s",
                   display: "flex", alignItems: "center", gap: 5,
                 }}>
-                  DASHBOARD
-                  <span style={{ fontSize: "0.55rem", transform: dashOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", display: "inline-block", opacity: 0.6 }}>▼</span>
+                  Dashboard
+                  <span style={{ fontSize: "0.55rem", transform: dashOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", opacity: 0.5 }}>▼</span>
                 </button>
                 {dashOpen && (
                   <div style={{
-                    position: "absolute", top: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
-                    background: "#111113", border: `1px solid ${C.cyanBorder}`,
-                    borderRadius: 8, overflow: "hidden", minWidth: 180,
-                    boxShadow: `0 8px 32px rgba(0,0,0,0.6), 0 0 20px ${C.cyanGlow}`,
+                    position: "absolute", top: "calc(100% + 8px)", left: 0,
+                    background: "#111113", border: `1px solid ${C.border}`,
+                    borderRadius: 12, overflow: "hidden", minWidth: 200,
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
                     animation: "modalIn 0.15s ease",
                   }}>
                     {[
@@ -259,72 +262,116 @@ function Navbar({ view, setView, wallet, profile, onConnectClick, onDisconnect }
                     ].map(({ v, label, icon, desc }) => (
                       <button key={v} onClick={() => { setView(v); setDashOpen(false); }} style={{
                         display: "flex", alignItems: "center", gap: 12,
-                        width: "100%", padding: "13px 16px",
+                        width: "100%", padding: "12px 16px",
                         background: view === v ? C.cyanDim : "transparent",
-                        border: "none", borderLeft: view === v ? `2px solid ${C.cyan}` : "2px solid transparent",
+                        border: "none",
                         cursor: "pointer", textAlign: "left", transition: "background 0.15s",
                       }}>
-                        <span style={{ fontSize: "1.1rem", opacity: 0.8 }}>{icon}</span>
+                        <span style={{ fontSize: "1.1rem" }}>{icon}</span>
                         <div>
-                          <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.85rem", color: view === v ? C.cyan : C.text }}>{label}</div>
-                          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.7rem", color: C.text3, marginTop: 1 }}>{desc}</div>
+                          <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.875rem", color: view === v ? C.cyan : C.text }}>{label}</div>
+                          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.75rem", color: C.text3, marginTop: 1 }}>{desc}</div>
                         </div>
                       </button>
                     ))}
                   </div>
                 )}
               </div>
+            )}
+          </div>
+
+          {/* CENTER — Search bar */}
+          {!isMobile && (
+            <div style={{ flex: 1, display: "flex", justifyContent: "center", padding: "0 1rem" }}>
+              <div style={{
+                position: "relative", width: "100%", maxWidth: 420,
+              }}>
+                <span style={{
+                  position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)",
+                  color: C.text3, fontSize: "0.85rem", pointerEvents: "none",
+                }}>🔍</span>
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search tokens and pools"
+                  style={{
+                    width: "100%",
+                    background: "#1a1a1e",
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 10,
+                    padding: "0.5rem 2.5rem 0.5rem 2.2rem",
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: "0.875rem",
+                    color: C.text,
+                    outline: "none",
+                    transition: "border-color 0.15s",
+                  }}
+                  onFocus={e => e.target.style.borderColor = "rgba(61,139,94,0.4)"}
+                  onBlur={e => e.target.style.borderColor = C.border}
+                />
+                <kbd style={{
+                  position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                  background: "#222228", border: `1px solid ${C.border}`,
+                  borderRadius: 4, padding: "1px 5px",
+                  fontFamily: "'DM Mono', monospace", fontSize: "0.65rem", color: C.text3,
+                }}>/</kbd>
+              </div>
             </div>
           )}
 
-          {/* Right side */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Desktop wallet area */}
-            {!isMobile && wallet && (
+          {/* RIGHT — Wallet area */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 0 }}>
+            {!isMobile && wallet ? (
               <>
+                {/* Profile pill */}
                 <button onClick={() => setView("profile")} style={{
                   display: "flex", alignItems: "center", gap: 8,
-                  background: view === "profile" ? C.cyanDim : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${view === "profile" ? C.cyanBorder : C.border}`,
-                  borderRadius: 6, padding: "5px 10px 5px 6px",
-                  cursor: "pointer", transition: "all 0.2s",
+                  background: view === "profile" ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 999, padding: "4px 12px 4px 4px",
+                  cursor: "pointer", transition: "all 0.15s",
                 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: "50%", border: `1.5px solid ${C.cyanBorder}`, background: "rgba(249,115,22,0.1)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: C.cyanDim, border: `1.5px solid ${C.cyanBorder}`, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     {profile?.avatar ? <img src={profile.avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: "0.85rem" }}>👤</span>}
                   </div>
-                  <div style={{ textAlign: "left" }}>
-                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "0.78rem", color: profile?.username ? C.text : C.text3 }}>{profile?.username || "Set up profile"}</div>
-                    {profile?.xHandle && <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.65rem", color: C.cyan }}>@{profile.xHandle}</div>}
-                  </div>
-                </button>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, borderRadius: 6, padding: "6px 10px", fontFamily: "'DM Mono', monospace", fontSize: "0.72rem", color: C.cyan }}>
+                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.85rem", color: C.text }}>
+                    {wallet.slice(0,6)}…{wallet.slice(-4)}
+                  </span>
                   <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
-                  {wallet.slice(0, 6)}…{wallet.slice(-4)}
-                </div>
-                <button onClick={onDisconnect} style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.text3, padding: "6px 10px", borderRadius: 6, fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.72rem", cursor: "pointer", letterSpacing: "0.06em" }}>DISCONNECT</button>
+                </button>
+                <button onClick={onDisconnect} style={{
+                  background: "transparent", border: `1px solid ${C.border}`,
+                  color: C.text3, padding: "6px 12px", borderRadius: 8,
+                  fontFamily: "'DM Sans', sans-serif", fontWeight: 500, fontSize: "0.8rem", cursor: "pointer",
+                }}>Disconnect</button>
               </>
-            )}
-            {!isMobile && !wallet && (
-              <button onClick={onConnectClick} style={{ ...btnPrimary, padding: "0.5rem 1.4rem", fontSize: "0.8rem" }}>CONNECT WALLET</button>
-            )}
-
-            {/* Mobile: avatar OR connect + hamburger */}
-            {isMobile && wallet && (
-              <button onClick={() => setView("profile")} style={{ width: 34, height: 34, borderRadius: "50%", border: `1.5px solid ${C.cyanBorder}`, background: "rgba(249,115,22,0.1)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-                {profile?.avatar ? <img src={profile.avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: "1rem" }}>👤</span>}
+            ) : !isMobile && (
+              <button onClick={onConnectClick} style={{ ...btnPrimary, padding: "0.5rem 1.25rem", fontSize: "0.875rem" }}>
+                Connect Wallet
               </button>
             )}
-            {isMobile && !wallet && (
-              <button onClick={onConnectClick} style={{ ...btnPrimary, padding: "0.45rem 0.9rem", fontSize: "0.7rem",  }}>CONNECT</button>
-            )}
 
-            {/* Hamburger button */}
+            {/* Mobile: avatar/connect + hamburger */}
             {isMobile && (
-              <button onClick={() => setMenuOpen(o => !o)} style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6, width: 38, height: 38, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, cursor: "pointer", flexShrink: 0, padding: 0 }}>
-                <span style={{ width: 18, height: 1.5, background: menuOpen ? C.cyan : C.text2, borderRadius: 2, transition: "all 0.2s", transform: menuOpen ? "rotate(45deg) translateY(3.5px)" : "none" }} />
-                <span style={{ width: 18, height: 1.5, background: menuOpen ? C.cyan : C.text2, borderRadius: 2, transition: "all 0.2s", opacity: menuOpen ? 0 : 1 }} />
-                <span style={{ width: 18, height: 1.5, background: menuOpen ? C.cyan : C.text2, borderRadius: 2, transition: "all 0.2s", transform: menuOpen ? "rotate(-45deg) translateY(-3.5px)" : "none" }} />
-              </button>
+              <>
+                {wallet ? (
+                  <button onClick={() => setView("profile")} style={{ width: 32, height: 32, borderRadius: "50%", border: `1.5px solid ${C.cyanBorder}`, background: C.cyanDim, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                    {profile?.avatar ? <img src={profile.avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: "0.9rem" }}>👤</span>}
+                  </button>
+                ) : (
+                  <button onClick={onConnectClick} style={{ ...btnPrimary, padding: "0.4rem 0.9rem", fontSize: "0.78rem" }}>Connect</button>
+                )}
+                <button onClick={() => setMenuOpen(o => !o)} style={{
+                  background: "transparent", border: `1px solid ${C.border}`,
+                  borderRadius: 8, width: 36, height: 36,
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  gap: 4.5, cursor: "pointer", padding: 0,
+                }}>
+                  <span style={{ width: 16, height: 1.5, background: menuOpen ? C.cyan : C.text2, borderRadius: 2, transition: "all 0.2s", transform: menuOpen ? "rotate(45deg) translateY(3px)" : "none" }} />
+                  <span style={{ width: 16, height: 1.5, background: menuOpen ? C.cyan : C.text2, borderRadius: 2, opacity: menuOpen ? 0 : 1, transition: "all 0.2s" }} />
+                  <span style={{ width: 16, height: 1.5, background: menuOpen ? C.cyan : C.text2, borderRadius: 2, transition: "all 0.2s", transform: menuOpen ? "rotate(-45deg) translateY(-3px)" : "none" }} />
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -415,14 +462,9 @@ function Hero({ setView, onConnectClick }) {
       minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
       position: "relative", overflow: "hidden", paddingTop: 64,
     }}>
-      {/* Grid background */}
-      <div style={{
-        position: "absolute", inset: 0,
-        backgroundImage: `linear-gradient(${C.cyanDim} 1px, transparent 1px), linear-gradient(90deg, ${C.cyanDim} 1px, transparent 1px)`,
-        backgroundSize: "60px 60px", opacity: 0.5,
-      }} />
-      <div style={{ position: "absolute", top: "40%", left: "50%", transform: "translate(-50%,-50%)", width: 900, height: 900, borderRadius: "50%", background: `radial-gradient(ellipse, rgba(232,114,12,0.07) 0%, transparent 70%)`, pointerEvents: "none" }} />
-      <div style={{ position: "absolute", top: 0, right: "20%", width: 1, height: "100%", background: `linear-gradient(180deg, transparent, ${C.cyanGlow}, transparent)`, transform: "rotate(15deg)", transformOrigin: "top" }} />
+      {/* Clean backdrop — subtle top glow + secondary accent */}
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 55% at 50% -5%, rgba(61,139,94,0.08) 0%, transparent 70%)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 50% 40% at 75% 70%, rgba(61,139,94,0.03) 0%, transparent 60%)", pointerEvents: "none" }} />
 
       <div style={{ textAlign: "center", position: "relative", zIndex: 1, padding: isMobile ? "0 1.2rem" : "0 2rem", width: "100%" }}>
 
@@ -444,7 +486,7 @@ function Hero({ setView, onConnectClick }) {
           lineHeight: 0.92, letterSpacing: "-0.04em", color: C.text, margin: 0,
         }}>
           LAUNCH.<br />
-          <span style={{ color: C.cyan, textShadow: `0 0 60px ${C.cyanGlow}` }}>RAID.</span><br />
+          <span style={{ color: C.cyan }}>RAID.</span><br />
           DOMINATE.
         </h1>
 
@@ -501,7 +543,7 @@ function TokenCard({ token, onPromote }) {
       onMouseLeave={() => setHovered(false)}
       style={{
         minWidth: 200, maxWidth: 200,
-        background: hovered ? "rgba(232,114,12,0.05)" : "#111113",
+        background: hovered ? "rgba(61,139,94,0.05)" : "#111113",
         border: `1px solid ${hovered ? C.cyanBorder : C.border}`,
         borderRadius: 10, padding: "16px",
         cursor: "pointer", flexShrink: 0,
@@ -605,8 +647,8 @@ function TokenRow({ title, badge, badgeColor, tokens, loading, error, onPromote 
       {/* Scroll track */}
       <div style={{ position: "relative" }}>
         {/* Fade edges */}
-        <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 60, zIndex: 2, background: "linear-gradient(90deg, #0a0a0b, transparent)", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 60, zIndex: 2, background: "linear-gradient(270deg, #0a0a0b, transparent)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 60, zIndex: 2, background: "linear-gradient(90deg, #0a0a0b 60%, transparent)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 60, zIndex: 2, background: "linear-gradient(270deg, #0a0a0b 60%, transparent)", pointerEvents: "none" }} />
 
         <div ref={rowRef} style={{
           display: "flex", gap: 14, overflowX: "auto", paddingLeft: "2rem", paddingRight: "2rem",
@@ -679,7 +721,7 @@ function useTokens(endpoint) {
           image:   t.logo_url || null,
           address: t.address || t.id,
           emoji:   "🪙",
-          color:   "rgba(232,114,12,0.12)",
+          color:   "rgba(61,139,94,0.12)",
         }));
         setTokens(normalised);
         setLoading(false);
@@ -784,7 +826,7 @@ function TiersPage({ setView }) {
         {TIERS.map((tier) => (
           <div key={tier.id} onClick={() => { setSelected(tier.id); setView("promote"); }}
             style={{
-              background: tier.featured ? `linear-gradient(180deg, rgba(232,114,12,0.06) 0%, rgba(5,5,5,0.95) 100%)` : "rgba(255,255,255,0.02)",
+              background: tier.featured ? `linear-gradient(180deg, rgba(61,139,94,0.08) 0%, rgba(5,5,5,0.95) 100%)` : "rgba(255,255,255,0.02)",
               border: `1px solid ${tier.featured ? C.cyan : C.border}`,
               borderRadius: 12, padding: isMobile ? "1.8rem 1.5rem" : "2.5rem 2rem", cursor: "pointer", position: "relative",
               transition: "all 0.3s ease",
@@ -794,7 +836,7 @@ function TiersPage({ setView }) {
             {tier.featured && (
               <div style={{
                 position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)",
-                background: `linear-gradient(135deg, ${C.cyan}, #cc6200)`,
+                background: `linear-gradient(135deg, ${C.cyan}, #2d6e4a)`,
                 color: "#ffffff", fontFamily: "'DM Sans', sans-serif",
                 fontWeight: 800, letterSpacing: "0.08em", fontSize: "0.65rem",
                 padding: "0.25rem 1rem",
@@ -837,7 +879,7 @@ function TiersPage({ setView }) {
 
             <button style={{
               width: "100%",
-              background: tier.featured ? `linear-gradient(135deg, ${C.cyan}, #cc6200)` : "transparent",
+              background: tier.featured ? `linear-gradient(135deg, ${C.cyan}, #2d6e4a)` : "transparent",
               border: `1px solid ${tier.color}`,
               color: tier.featured ? "#ffffff" : tier.color,
               padding: "0.85rem",
@@ -979,7 +1021,7 @@ function RaiderDashboard({ wallet, onConnectClick }) {
 
         {/* Profile Header */}
         <div style={{
-          background: `linear-gradient(135deg, rgba(232,114,12,0.07), rgba(0,144,204,0.04))`,
+          background: `linear-gradient(135deg, rgba(61,139,94,0.07), rgba(0,144,204,0.04))`,
           border: `1px solid ${C.cyanBorder}`, borderRadius: 12, padding: isMobile ? "1.25rem" : "2rem",
           display: "flex", alignItems: isMobile ? "flex-start" : "center",
           flexDirection: isMobile ? "column" : "row",
@@ -1056,13 +1098,13 @@ function RaiderDashboard({ wallet, onConnectClick }) {
 
             {/* Cashout + multipliers */}
             <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-              <div style={{ background: `linear-gradient(135deg, rgba(232,114,12,0.07), rgba(5,5,5,0.5))`, border: `1px solid ${C.cyanBorder}`, borderRadius: 12, padding: "1.5rem" }}>
+              <div style={{ background: `linear-gradient(135deg, rgba(61,139,94,0.07), rgba(5,5,5,0.5))`, border: `1px solid ${C.cyanBorder}`, borderRadius: 12, padding: "1.5rem" }}>
                 <div style={{ ...labelStyle, marginBottom: "0.5rem" }}>Available Balance</div>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "2.8rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>3,840 PAX</div>
                 <div style={{ color: C.text3, fontSize: "0.8rem", marginBottom: "1.5rem", fontFamily: "'DM Sans', sans-serif" }}>≈ $192.00 USD</div>
                 <button style={{
                   width: "100%",
-                  background: `linear-gradient(135deg, ${C.cyan}, #cc6200)`,
+                  background: `linear-gradient(135deg, ${C.cyan}, #2d6e4a)`,
                   border: "none", color: "#ffffff", padding: "0.85rem",
                   fontFamily: "'DM Sans', sans-serif", fontWeight: 800,
                   letterSpacing: "0.05em", fontSize: "0.85rem", cursor: "pointer",
@@ -1181,7 +1223,7 @@ function PromotePage({ wallet, onConnectClick }) {
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "1rem", marginBottom: "2rem" }}>
               {TIERS.map(tier => (
                 <div key={tier.id} onClick={() => setSelectedTier(tier)} style={{
-                  background: selectedTier?.id === tier.id ? C.cyanDim : tier.featured ? "rgba(232,114,12,0.03)" : "rgba(255,255,255,0.02)",
+                  background: selectedTier?.id === tier.id ? C.cyanDim : tier.featured ? "rgba(61,139,94,0.03)" : "rgba(255,255,255,0.02)",
                   border: `1px solid ${selectedTier?.id === tier.id ? C.cyan : tier.featured ? C.cyanBorder : C.border}`,
                   borderRadius: 8, padding: "1.5rem", cursor: "pointer",
                   boxShadow: selectedTier?.id === tier.id ? `0 0 20px ${C.cyanGlow}` : tier.featured ? `0 0 16px ${C.cyanGlow}` : "none",
@@ -1190,7 +1232,7 @@ function PromotePage({ wallet, onConnectClick }) {
                   {tier.featured && (
                     <div style={{
                       position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)",
-                      background: `linear-gradient(135deg, ${C.cyan}, #cc6200)`,
+                      background: `linear-gradient(135deg, ${C.cyan}, #2d6e4a)`,
                       color: "#ffffff", fontFamily: "'DM Sans', sans-serif",
                       fontWeight: 800, letterSpacing: "0.05em", fontSize: "0.55rem",
                       padding: "0.2rem 0.75rem",
@@ -1227,7 +1269,7 @@ function PromotePage({ wallet, onConnectClick }) {
             </div>
             <button onClick={() => selectedTier && setStep(2)} style={{
               width: "100%",
-              background: selectedTier ? `linear-gradient(135deg, ${C.cyan}, #cc6200)` : "rgba(255,255,255,0.05)",
+              background: selectedTier ? `linear-gradient(135deg, ${C.cyan}, #2d6e4a)` : "rgba(255,255,255,0.05)",
               border: "none", color: selectedTier ? "#ffffff" : C.text3, padding: "1rem",
               fontFamily: "'DM Sans', sans-serif", fontWeight: 800, letterSpacing: "0.05em",
               fontSize: "0.95rem", cursor: selectedTier ? "pointer" : "not-allowed",
@@ -1309,7 +1351,7 @@ function PromotePage({ wallet, onConnectClick }) {
               {wallet ? (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 12,
-                  background: "rgba(232,114,12,0.05)", border: `1px solid ${C.cyanBorder}`,
+                  background: "rgba(61,139,94,0.05)", border: `1px solid ${C.cyanBorder}`,
                   borderRadius: 6, padding: "12px 16px", marginBottom: "1rem",
                 }}>
                   <span style={{ width: 9, height: 9, borderRadius: "50%", background: C.green, boxShadow: `0 0 8px ${C.green}`, flexShrink: 0 }} />
@@ -1386,7 +1428,7 @@ function DevDashboard({ wallet, onConnectClick, setView }) {
 
         {/* Header */}
         <div style={{
-          background: `linear-gradient(135deg, rgba(232,114,12,0.07), rgba(0,144,204,0.03))`,
+          background: `linear-gradient(135deg, rgba(61,139,94,0.07), rgba(0,144,204,0.03))`,
           border: `1px solid ${C.cyanBorder}`, borderRadius: 12, padding: isMobile ? "1.25rem" : "1.75rem 2rem",
           display: "flex", alignItems: "center", justifyContent: "space-between",
           marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem",
@@ -1494,7 +1536,7 @@ function DevDashboard({ wallet, onConnectClick, setView }) {
                       height: "100%", width: `${c.progress}%`,
                       background: c.progress === 100
                         ? `linear-gradient(90deg, ${C.green}, #22c55e)`
-                        : `linear-gradient(90deg, ${C.cyan}, #cc6200)`,
+                        : `linear-gradient(90deg, ${C.cyan}, #2d6e4a)`,
                       borderRadius: 99,
                       boxShadow: c.progress < 100 ? `0 0 8px ${C.cyanGlow}` : "none",
                       transition: "width 0.6s ease",
@@ -1866,7 +1908,7 @@ function ProfilePage({ wallet, profile, onSaveProfile, onConnectClick }) {
 
         {/* Profile card */}
         <div style={{
-          background: `linear-gradient(135deg, rgba(232,114,12,0.06), rgba(5,5,5,0.95))`,
+          background: `linear-gradient(135deg, rgba(61,139,94,0.08), rgba(5,5,5,0.95))`,
           border: `1px solid ${C.cyanBorder}`, borderRadius: 14,
           padding: "2.5rem", marginBottom: 24, textAlign: "center",
         }}>
@@ -1987,7 +2029,7 @@ function HomeTiersStrip({ setView }) {
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: isMobile ? "0.75rem" : "1rem" }}>
           {TIERS.map(tier => (
             <div key={tier.id} style={{
-              background: tier.featured ? `linear-gradient(135deg, rgba(232,114,12,0.07), rgba(5,5,5,0.95))` : "rgba(255,255,255,0.02)",
+              background: tier.featured ? `linear-gradient(135deg, rgba(61,139,94,0.07), rgba(5,5,5,0.95))` : "rgba(255,255,255,0.02)",
               border: `1px solid ${tier.featured ? C.cyan : C.border}`,
               borderRadius: 8, padding: isMobile ? "1.2rem 1rem" : "1.5rem",
               display: "flex", flexDirection: "column", gap: "1rem",
@@ -1997,7 +2039,7 @@ function HomeTiersStrip({ setView }) {
               {tier.featured && (
                 <div style={{
                   position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)",
-                  background: `linear-gradient(135deg, ${C.cyan}, #cc6200)`,
+                  background: `linear-gradient(135deg, ${C.cyan}, #2d6e4a)`,
                   color: "#ffffff", fontFamily: "'DM Sans', sans-serif",
                   fontWeight: 800, letterSpacing: "0.05em", fontSize: "0.55rem",
                   padding: "0.2rem 0.75rem",
@@ -2016,7 +2058,7 @@ function HomeTiersStrip({ setView }) {
               </div>
               <button onClick={() => setView("promote")} style={{
                 width: "100%",
-                background: tier.featured ? `linear-gradient(135deg, ${C.cyan}, #cc6200)` : "transparent",
+                background: tier.featured ? `linear-gradient(135deg, ${C.cyan}, #2d6e4a)` : "transparent",
                 border: `1px solid ${tier.featured ? C.cyan : tier.color}`,
                 color: tier.featured ? "#ffffff" : tier.color,
                 padding: isMobile ? "0.6rem" : "0.7rem",
