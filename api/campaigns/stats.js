@@ -61,11 +61,22 @@ export default async function handler(req, res) {
 
     const active = campaigns.filter(c => c.status === "active").length;
 
+    // Also get total unique wallets registered
+    let totalUsers = 0;
+    try {
+      const userRes = await fetch(`${REDIS_URL}/${["SCARD", "paxpromote:wallets"].map(encodeURIComponent).join("/")}`, {
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+      });
+      const userJson = await userRes.json();
+      totalUsers = userJson.result || 0;
+    } catch {}
+
     return res.status(200).json({
       tokensPromoted:   uniqueTokens.size,
       totalPaxDeployed: totalPax,
       activeCampaigns:  active,
       totalCampaigns:   campaigns.length,
+      totalUsers,
     });
 
   } catch (err) {

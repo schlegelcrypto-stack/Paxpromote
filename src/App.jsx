@@ -454,7 +454,7 @@ function Hero({ setView, onConnectClick }) {
   const isMobile = useIsMobile();
 
   // Live stats from API
-  const [liveStats, setLiveStats] = useState({ tokensPromoted: 0, totalPaxDeployed: 0, activeCampaigns: 0 });
+  const [liveStats, setLiveStats] = useState({ tokensPromoted: 0, totalPaxDeployed: 0, activeCampaigns: 0, totalUsers: 0 });
 
   useEffect(() => {
     const load = () =>
@@ -617,10 +617,10 @@ function Hero({ setView, onConnectClick }) {
           margin: `${isMobile ? "3rem" : "5rem"} auto 0`,
         }}>
           {[
-            { num: liveStats.tokensPromoted.toString(),                                             label: "Tokens Promoted" },
+            { num: liveStats.tokensPromoted.toString(),                                                     label: "Tokens Promoted" },
             { num: liveStats.totalPaxDeployed > 0 ? fmtPax(liveStats.totalPaxDeployed) + " PAX" : "0 PAX", label: "PAX Deployed" },
-            { num: liveStats.tokensPromoted > 0 ? (liveStats.tokensPromoted * 5).toString() : "0", label: "Active Raiders" },
-            { num: paxPrice ? `$${paxPrice}` : "…",                                                label: "PAX Price" },
+            { num: (liveStats.totalUsers || 0).toString(),                                                  label: "Active Raiders" },
+            { num: paxPrice ? `$${paxPrice}` : "…",                                                        label: "PAX Price" },
           ].map(({ num, label }) => (
             <div key={label} style={{ textAlign: "center" }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: isMobile ? "1.4rem" : "2rem", fontWeight: 700, color: C.cyan, letterSpacing: "-0.04em" }}>{num}</div>
@@ -696,16 +696,8 @@ function TokenCard({ token, onPromote, onTokenClick }) {
         <TokenAvatar token={token} size={48} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-            <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.95rem", color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{token.name}</span>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.95rem", color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{token.name}</span>
             <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.72rem", color: C.text3, whiteSpace: "nowrap" }}>{token.ticker}</span>
-            {isPromoted && (
-              <span style={{
-                fontFamily: "'DM Mono', monospace", fontSize: "0.58rem", letterSpacing: "0.06em",
-                color: C.cyan, background: "rgba(61,139,94,0.15)",
-                border: "1px solid rgba(61,139,94,0.3)",
-                borderRadius: 4, padding: "1px 5px",
-              }}>PROMOTED</span>
-            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, fontSize: "1rem", color: C.text }}>{token.price || "—"}</span>
@@ -714,6 +706,14 @@ function TokenCard({ token, onPromote, onTokenClick }) {
               color: changeColor, background: changeBg,
               padding: "1px 7px", borderRadius: 20,
             }}>{isUp ? "+" : ""}{token.change?.toFixed(2)}%</span>
+            {isPromoted && (
+              <span style={{
+                fontFamily: "'DM Mono', monospace", fontSize: "0.56rem", letterSpacing: "0.06em",
+                color: C.cyan, background: "rgba(61,139,94,0.15)",
+                border: "1px solid rgba(61,139,94,0.3)",
+                borderRadius: 4, padding: "1px 5px", whiteSpace: "nowrap",
+              }}>⚡ PROMOTED</span>
+            )}
           </div>
         </div>
       </div>
@@ -3111,22 +3111,26 @@ function AppInner() {
   // ── When wallet connects: load their profile or prompt creation ──
   useEffect(() => {
     if (!isConnected || !address) {
-      // Wallet disconnected — clear profile from state (not from storage)
       setProfile(null);
       setShowProfileSetup(false);
       return;
     }
+
+    // Register this wallet as a raider (increments global user count)
+    fetch("/api/users/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallet: address }),
+    }).catch(() => {});
 
     // Look up profile keyed to this specific wallet
     const key = `paxpromote_profile_${address.toLowerCase()}`;
     try {
       const stored = JSON.parse(localStorage.getItem(key));
       if (stored && stored.username) {
-        // Returning user — log them straight in
         setProfile(stored);
         setShowProfileSetup(false);
       } else {
-        // New wallet — show profile creation after short delay
         const timer = setTimeout(() => setShowProfileSetup(true), 600);
         return () => clearTimeout(timer);
       }
